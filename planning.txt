@@ -1,0 +1,33 @@
+Project Structure:
+
+parking-lot-system/
+│
+├── assets/                  # Static files (CSS, JS, images)
+│   ├── css/
+│   │   └── styles.css       # Custom styles
+│   └── js/
+│       └── scripts.js       # Optional JavaScript
+│
+├── config/
+│   └── db.php               # Database connection file
+│
+├── includes/                # Reusable components
+│   ├── header.php           # Header file for consistent layout
+│   ├── footer.php           # Footer file for consistent layout
+│   └── sidebar.php          # Sidebar for navigation
+│
+├── admin/
+│   ├── dashboard.php        # Main dashboard
+│   ├── add_vehicle.php      # Add vehicle form
+│   ├── view_slots.php       # View and manage parking slots
+│   ├── change_credentials.php # Update admin username/password
+│   ├── generate_receipt.php # Generate PDF receipt
+│   └── process/             # Process logic for forms
+│       ├── login_process.php # Admin login validation
+│       ├── add_vehicle_process.php # Add vehicle logic
+│       ├── delete_vehicle_process.php # Delete vehicle logic
+│       ├── update_credentials_process.php # Change credentials logic
+│
+├── index.php                # Login page
+├── logout.php               # Logout functionality
+└── database.sql             # SQL file for database structure
