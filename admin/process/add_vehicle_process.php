@@ -8,17 +8,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $slot_number = intval($_POST['slot_number']);
     $in_time = date("Y-m-d H:i:s"); // Capture current timestamp
 
-    // Insert vehicle data securely using a prepared statement
+    // Insert vehicle data securely into parked_vehicles table
     $insert_query = "INSERT INTO parked_vehicles (reg_number, vehicle_type, slot_number, in_time)
                      VALUES (?, ?, ?, ?)";
     
     if ($stmt = $conn->prepare($insert_query)) {
         $stmt->bind_param("ssis", $reg_number, $vehicle_type, $slot_number, $in_time);
         if ($stmt->execute()) {
-            // Mark the slot as occupied using another prepared statement
-            $update_slot_query = "UPDATE parking_slots SET status = 'occupied' WHERE slot_number = ?";
+            // Update parking_slots table with vehicle details
+            $update_slot_query = "UPDATE parking_slots 
+                                  SET status = 'occupied', 
+                                      vehicle_reg_number = ?, 
+                                      vehicle_type = ?, 
+                                      in_time = ? 
+                                  WHERE slot_number = ?";
             if ($update_stmt = $conn->prepare($update_slot_query)) {
-                $update_stmt->bind_param("i", $slot_number);
+                $update_stmt->bind_param("sssi", $reg_number, $vehicle_type, $in_time, $slot_number);
                 $update_stmt->execute();
                 $update_stmt->close();
             }
