@@ -7,7 +7,6 @@ Thumbs.db
 
 # Ignore IDE/project settings
 .vscode/
-.idea/
 
 # Ignore sensitive files
 config/db.php
@@ -21,3 +20,9 @@ config/db.php
 # Ignore generated files
 node_modules/
 public/storage/
+
+# Ignore receipts folder (PDF receipts)
+receipts/
+
+# Ignore Composer vendor directory
+vendor/
