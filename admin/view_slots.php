@@ -64,6 +64,12 @@ require_once '../config/db.php';
         </table>
 
         <?php
+        if (isset($_GET['success'])) {
+            echo "<script>alert('{$_GET['success']}');</script>";
+        }
+        ?>
+
+        <?php
         if (isset($_GET['receipt'])) {
             echo "<p><a href='{$_GET['receipt']}' target='_blank'>Download Receipt</a></p>";
         }

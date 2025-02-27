@@ -39,14 +39,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['slot_number'])) {
             // Generate PDF receipt
             $pdf = new TCPDF();
             $pdf->AddPage();
-            $pdf->SetFont('helvetica', '', 12);
+            $pdf->SetFont('dejavusans', '', 12);
             $pdf->Cell(0, 10, "Parking Receipt", 0, 1, 'C');
             $pdf->Ln(5);
             $pdf->Cell(0, 10, "Vehicle Reg. No: $reg_number", 0, 1);
             $pdf->Cell(0, 10, "In Time: $in_time", 0, 1);
             $pdf->Cell(0, 10, "Out Time: $out_time", 0, 1);
             $pdf->Cell(0, 10, "Total Hours Parked: $hours_parked", 0, 1);
-            $pdf->Cell(0, 10, "Total Fee: ₹$parking_fee", 0, 1);
+            $pdf->Cell(0, 10, "Total Fee: ₹ $parking_fee", 0, 1);
 
             // Save PDF
             $file_path = $receipts_dir . "/receipt_$reg_number.pdf";

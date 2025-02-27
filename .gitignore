@@ -10,19 +10,9 @@ Thumbs.db
 
 # Ignore sensitive files
 config/db.php
-*.env
-
-# Ignore compiled or cache files
-*.log
-*.cache
-/vendor/
-
-# Ignore generated files
-node_modules/
-public/storage/
 
 # Ignore receipts folder (PDF receipts)
-receipts/
+receipts/*
 
 # Ignore Composer vendor directory
 vendor/
