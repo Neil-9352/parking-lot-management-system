@@ -12,7 +12,7 @@ Thumbs.db
 config/db.php
 
 # Ignore receipts folder (PDF receipts)
-receipts/*
+admin/receipts/
 
 # Ignore Composer vendor directory
 vendor/
