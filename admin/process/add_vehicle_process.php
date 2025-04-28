@@ -24,19 +24,26 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $check_stmt->close();
     }
 
-    // Step 2: Update the parking_slots table instead of inserting into parked_vehicles
-    $update_slot_query = "UPDATE parking_slots 
-                          SET status = 'occupied', vehicle_reg_number = ?, vehicle_type = ?, in_time = ? 
-                          WHERE slot_number = ? AND status = 'unoccupied'"; // Ensure only unoccupied slots are updated
-                          
-    if ($update_stmt = $conn->prepare($update_slot_query)) {
-        $update_stmt->bind_param("sssi", $reg_number, $vehicle_type, $in_time, $slot_number);
-        if ($update_stmt->execute() && $update_stmt->affected_rows > 0) {
-            $update_stmt->close();
+    // Step 2: Insert vehicle if it's not already parked
+    $insert_query = "INSERT INTO parked_vehicles (reg_number, vehicle_type, slot_number, in_time)
+                     VALUES (?, ?, ?, ?)";
+    
+    if ($stmt = $conn->prepare($insert_query)) {
+        $stmt->bind_param("ssis", $reg_number, $vehicle_type, $slot_number, $in_time);
+        if ($stmt->execute()) {
+            // Step 3: Mark slot as occupied & update vehicle details
+            $update_slot_query = "UPDATE parking_slots SET status = 'occupied', vehicle_reg_number = ?, vehicle_type = ?, in_time = ? WHERE slot_number = ?";
+            if ($update_stmt = $conn->prepare($update_slot_query)) {
+                $update_stmt->bind_param("sssi", $reg_number, $vehicle_type, $in_time, $slot_number);
+                $update_stmt->execute();
+                $update_stmt->close();
+            }
+
+            $stmt->close();
             header("Location: ../view_slots.php?success=Vehicle+parked+successfully!");
             exit;
         } else {
-            echo "Error: Either the slot is already occupied or there was an issue updating.";
+            echo "Error: " . $stmt->error;
         }
     } else {
         echo "Error preparing statement: " . $conn->error;

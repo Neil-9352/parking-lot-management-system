@@ -30,6 +30,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['slot_number'])) {
                 $update_stmt->close();
             }
 
+            $update_parked_query = "UPDATE parked_vehicles SET out_time = ?, fee = ? WHERE reg_number = ? AND out_time IS NULL";
+            if ($update_parked_stmt = $conn->prepare($update_parked_query)) {
+                $update_parked_stmt->bind_param("sis", $out_time, $parking_fee, $reg_number);
+                $update_parked_stmt->execute();
+                $update_parked_stmt->close();
+            }
+
             // Ensure the receipts folder exists
             $receipts_dir = __DIR__ . "/../receipts";
             if (!is_dir($receipts_dir)) {
