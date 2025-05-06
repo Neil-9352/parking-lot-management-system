@@ -15,40 +15,65 @@ $slots_result = $conn->query($slots_query);
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Add Vehicle</title>
-    <link rel="stylesheet" href="../assets/css/styles.css">
+    <link rel="stylesheet" href="../bootstrap-5.3.6/css/bootstrap.css">
+    <script src="../bootstrap-5.3.6/js/bootstrap.bundle.js"></script>
 </head>
-<body>
 
-<?php include '../includes/sidebar.php'; ?>
+<body class="bg-light">
 
-<div class="container">
-    <h2>Add Vehicle</h2>
-    <form action="process/add_vehicle_process.php" method="POST">
-        <label for="reg_number">Vehicle Registration Number:</label>
-        <input type="text" id="reg_number" name="reg_number" required>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-3 col-lg-2 bg-dark min-vh-100 p-0">
+                <?php include '../includes/sidebar.php'; ?>
+            </div>
 
-        <label for="vehicle_type">Vehicle Type:</label>
-        <select id="vehicle_type" name="vehicle_type" required>
-            <option value="2-wheeler">2-Wheeler</option>
-            <option value="4-wheeler">4-Wheeler</option>
-        </select>
+            <!-- Main Content -->
+            <div class="col-md-9 col-lg-10 py-4">
+                <div class="card shadow mx-3"> <!-- Use mx-3 for some horizontal margin -->
+                    <div class="card-header bg-primary text-white">
+                        <h4 class="mb-0">Add Vehicle</h4>
+                    </div>
+                    <div class="card-body">
+                        <form action="process/add_vehicle_process.php" method="POST">
+                            <div class="mb-3">
+                                <label for="reg_number" class="form-label">Vehicle Registration Number</label>
+                                <input type="text" class="form-control" id="reg_number" name="reg_number" required>
+                            </div>
 
-        <label for="slot_number">Parking Slot:</label>
-        <select id="slot_number" name="slot_number" required>
-            <?php
-            while ($row = $slots_result->fetch_assoc()) {
-                echo "<option value='{$row['slot_number']}'>{$row['slot_number']}</option>";
-            }
-            ?>
-        </select>
+                            <div class="mb-3">
+                                <label for="vehicle_type" class="form-label">Vehicle Type</label>
+                                <select class="form-select" id="vehicle_type" name="vehicle_type" required>
+                                    <option value="2-wheeler">2-Wheeler</option>
+                                    <option value="4-wheeler">4-Wheeler</option>
+                                </select>
+                            </div>
 
-        <button type="submit">Park Vehicle</button>
-    </form>
-</div>
+                            <div class="mb-3">
+                                <label for="slot_number" class="form-label">Parking Slot</label>
+                                <select class="form-select" id="slot_number" name="slot_number" required>
+                                    <?php
+                                    while ($row = $slots_result->fetch_assoc()) {
+                                        echo "<option value='{$row['slot_number']}'>{$row['slot_number']}</option>";
+                                    }
+                                    ?>
+                                </select>
+                            </div>
 
+                            <button type="submit" class="btn btn-success w-100">Park Vehicle</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
 </body>
+
+
 </html>
