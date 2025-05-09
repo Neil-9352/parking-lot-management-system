@@ -12,7 +12,7 @@ if (isset($_POST['change_password'])) {
     } elseif (strlen($new_password) < 6) {
         $password_error = "Password must be at least 6 characters.";
     } else {
-        // Hash the password (good practice)
+        // Hash the password
         $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
 
         // Assuming you have an 'admin' table with a single admin user (id = 1)
