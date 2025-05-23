@@ -44,8 +44,8 @@ if (!isset($_SESSION['admin_logged_in'])) {
                 <div class="list-group shadow">
                     <a href="add_vehicle.php" class="list-group-item list-group-item-action">🚗 Add Vehicle</a>
                     <a href="view_slots.php" class="list-group-item list-group-item-action">📋 View Slots</a>
+                    <a href="report.php" class="list-group-item list-group-item-action">📊 Report</a>
                     <a href="settings_page.php" class="list-group-item list-group-item-action">⚙️ Settings</a>
-                    <!-- <a href="../logout.php" class="list-group-item list-group-item-action text-danger">🚪 Logout</a> -->
                 </div>
             </div>
         </div>

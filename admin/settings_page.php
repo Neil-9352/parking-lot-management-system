@@ -69,62 +69,187 @@ if (isset($_POST['sync_and_update_slots'])) {
         $slot_success = "Slot count is already correct.";
     }
 }
+
+// Handle Fee Update
+if (isset($_POST['update_fee'])) {
+    $fees = [
+        '2-wheeler' => [
+            'first_hour' => floatval($_POST['fee_2w_first']),
+            'next_hour' => floatval($_POST['fee_2w_next']),
+        ],
+        '4-wheeler' => [
+            'first_hour' => floatval($_POST['fee_4w_first']),
+            'next_hour' => floatval($_POST['fee_4w_next']),
+        ]
+    ];
+
+    foreach ($fees as $type => $data) {
+        $stmt = $conn->prepare("INSERT INTO fee (vehicle_type, first_hour_charge, next_hour_charge)
+                                VALUES (?, ?, ?)
+                                ON DUPLICATE KEY UPDATE first_hour_charge = VALUES(first_hour_charge), next_hour_charge = VALUES(next_hour_charge)");
+        $stmt->bind_param("sdd", $type, $data['first_hour'], $data['next_hour']);
+        $stmt->execute();
+    }
+
+    $fee_success = "Fee settings updated successfully.";
+}
+
+// Fetch existing fees
+$fee_data = [
+    '2-wheeler' => ['first_hour' => '', 'next_hour' => ''],
+    '4-wheeler' => ['first_hour' => '', 'next_hour' => '']
+];
+$result = $conn->query("SELECT * FROM fee");
+while ($row = $result->fetch_assoc()) {
+    $fee_data[$row['vehicle_type']] = [
+        'first_hour' => $row['first_hour_charge'],
+        'next_hour' => $row['next_hour_charge']
+    ];
+}
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>Admin Settings</title>
-    <link rel="stylesheet" href="../assets/css/styles.css">
+    <link rel="stylesheet" href="../bootstrap-5.3.6/css/bootstrap.css">
+    <script src="../bootstrap-5.3.6/js/bootstrap.bundle.js"></script>
 </head>
-<body>
-    <?php include '../includes/sidebar.php'; ?>
-    <div class="main-content">
-        <h2>Admin Settings</h2>
 
-        <!-- Change Password Section -->
-        <section>
-            <h3>Change Password</h3>
-            <?php if (isset($password_success)) echo "<p style='color: green;'>$password_success</p>"; ?>
-            <?php if (isset($password_error)) echo "<p style='color: red;'>$password_error</p>"; ?>
-            <form action="settings_page.php" method="POST">
-                <label for="new_password">New Password:</label><br>
-                <input type="password" id="new_password" name="new_password" required><br><br>
+<body class="bg-light">
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-3 col-lg-2 bg-dark min-vh-100 p-0">
+                <?php include '../includes/sidebar.php'; ?>
+            </div>
 
-                <label for="confirm_password">Confirm Password:</label><br>
-                <input type="password" id="confirm_password" name="confirm_password" required><br><br>
+            <!-- Main Content -->
+            <div class="col-md-9 col-lg-10 py-4 justify-content-center">
+                <div class="card mx-3 shadow">
+                    <div class="card-header bg-primary text-white">
+                        <h4 class="mb-0">Admin Settings</h4>
+                    </div>
+                    <div class="card-body">
+                        <!-- Change Password Section -->
+                        <section class="mb-5">
+                            <h3>Change Password</h3>
+                            <?php if (isset($password_success)) : ?>
+                                <div class="alert alert-success"><?= htmlspecialchars($password_success) ?></div>
+                            <?php endif; ?>
+                            <?php if (isset($password_error)) : ?>
+                                <div class="alert alert-danger"><?= htmlspecialchars($password_error) ?></div>
+                            <?php endif; ?>
+                            <form action="settings_page.php" method="POST" class="needs-validation" novalidate>
+                                <div class="mb-3">
+                                    <label for="new_password" class="form-label">New Password:</label>
+                                    <input type="password" class="form-control" id="new_password" name="new_password" required />
+                                    <div class="invalid-feedback">Please enter a new password.</div>
+                                </div>
 
-                <button type="submit" name="change_password">Change Password</button>
-            </form>
-        </section>
+                                <div class="mb-3">
+                                    <label for="confirm_password" class="form-label">Confirm Password:</label>
+                                    <input type="password" class="form-control" id="confirm_password" name="confirm_password" required />
+                                    <div class="invalid-feedback">Please confirm your password.</div>
+                                </div>
 
-        <hr>
+                                <button type="submit" name="change_password" class="btn btn-primary">Change Password</button>
+                            </form>
+                        </section>
 
-        <!-- Sync and Update Slots Section -->
-        <section>
-            <h3>Sync and Update Parking Slots</h3>
-            <?php if (isset($slot_success)) echo "<p style='color: green;'>$slot_success</p>"; ?>
-            <?php if (isset($slot_error)) echo "<p style='color: red;'>$slot_error</p>"; ?>
-            <form action="settings_page.php" method="POST">
-                <label for="total_slots">Total Number of Slots:</label><br>
-                <input type="number" id="total_slots" name="total_slots" required min="1" value="<?php echo isset($total_slots) ? $total_slots : ''; ?>"><br><br>
+                        <hr />
 
-                <button type="submit" name="sync_and_update_slots">Update and Sync Slots</button>
-            </form>
-        </section>
+                        <!-- Sync and Update Slots Section -->
+                        <section class="mb-5">
+                            <h3>Sync and Update Parking Slots</h3>
+                            <?php if (isset($slot_success)) : ?>
+                                <div class="alert alert-success"><?= htmlspecialchars($slot_success) ?></div>
+                            <?php endif; ?>
+                            <?php if (isset($slot_error)) : ?>
+                                <div class="alert alert-danger"><?= htmlspecialchars($slot_error) ?></div>
+                            <?php endif; ?>
+                            <form action="settings_page.php" method="POST" class="needs-validation" novalidate>
+                                <div class="mb-3">
+                                    <label for="total_slots" class="form-label">Total Number of Slots:</label>
+                                    <input type="number" class="form-control" id="total_slots" name="total_slots" required min="1"
+                                        value="<?= isset($total_slots) ? intval($total_slots) : '' ?>" />
+                                    <div class="invalid-feedback">Please enter the total number of slots (minimum 1).</div>
+                                </div>
 
-        <hr>
+                                <button type="submit" name="sync_and_update_slots" class="btn btn-primary">Update and Sync Slots</button>
+                            </form>
+                        </section>
 
-        <!-- Future Sections -->
-        <section>
-            <h3>Other Admin Tools (Coming Soon)</h3>
-            <ul>
-                <li>Backup Database</li>
-                <li>Reset All Parking Data</li>
-                <li>Manage Admin Users</li>
-            </ul>
-        </section>
+                        <hr />
+
+                        <!-- Change Fee Settings -->
+                        <section class="mb-5">
+                            <h3>Change Fee Settings</h3>
+                            <?php if (isset($fee_success)) : ?>
+                                <div class="alert alert-success"><?= htmlspecialchars($fee_success) ?></div>
+                            <?php endif; ?>
+                            <form method="POST" class="needs-validation" novalidate>
+                                <div class="mb-4">
+                                    <h4>2-Wheeler</h4>
+                                    <div class="mb-3">
+                                        <label for="fee_2w_first" class="form-label">First Hour Fee (₹):</label>
+                                        <input type="number" step="0.01" min="0" class="form-control" id="fee_2w_first" name="fee_2w_first" required
+                                            value="<?= htmlspecialchars($fee_data['2-wheeler']['first_hour']) ?>" />
+                                        <div class="invalid-feedback">Please enter the first hour fee for 2-wheelers.</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="fee_2w_next" class="form-label">Next Hour Fee (₹):</label>
+                                        <input type="number" step="0.01" min="0" class="form-control" id="fee_2w_next" name="fee_2w_next" required
+                                            value="<?= htmlspecialchars($fee_data['2-wheeler']['next_hour']) ?>" />
+                                        <div class="invalid-feedback">Please enter the next hour fee for 2-wheelers.</div>
+                                    </div>
+                                </div>
+
+                                <div class="mb-4">
+                                    <h4>4-Wheeler</h4>
+                                    <div class="mb-3">
+                                        <label for="fee_4w_first" class="form-label">First Hour Fee (₹):</label>
+                                        <input type="number" step="0.01" min="0" class="form-control" id="fee_4w_first" name="fee_4w_first" required
+                                            value="<?= htmlspecialchars($fee_data['4-wheeler']['first_hour']) ?>" />
+                                        <div class="invalid-feedback">Please enter the first hour fee for 4-wheelers.</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="fee_4w_next" class="form-label">Next Hour Fee (₹):</label>
+                                        <input type="number" step="0.01" min="0" class="form-control" id="fee_4w_next" name="fee_4w_next" required
+                                            value="<?= htmlspecialchars($fee_data['4-wheeler']['next_hour']) ?>" />
+                                        <div class="invalid-feedback">Please enter the next hour fee for 4-wheelers.</div>
+                                    </div>
+                                </div>
+
+                                <button type="submit" name="update_fee" class="btn btn-primary">Update Fees</button>
+                            </form>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
+
+    <!-- Optional: Bootstrap form validation script -->
+    <script>
+        (() => {
+            'use strict'
+            const forms = document.querySelectorAll('.needs-validation')
+            Array.from(forms).forEach(form => {
+                form.addEventListener('submit', event => {
+                    if (!form.checkValidity()) {
+                        event.preventDefault()
+                        event.stopPropagation()
+                    }
+                    form.classList.add('was-validated')
+                }, false)
+            })
+        })()
+    </script>
 </body>
+
+
+
 </html>
