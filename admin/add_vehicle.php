@@ -8,8 +8,12 @@ if (!isset($_SESSION['admin_logged_in'])) {
     exit;
 }
 
+$success_msg = $_SESSION['toast_success'] ?? null;
+$error_msg = $_SESSION['toast_error'] ?? null;
+unset($_SESSION['toast_success'], $_SESSION['toast_error']);
+
 // Fetch available parking slots (only unoccupied slots)
-$slots_query = "SELECT slot_number FROM parking_slots WHERE status = 'unoccupied'";
+$slots_query = "SELECT slot_number FROM parking_slot WHERE status = 'unoccupied'";
 $slots_result = $conn->query($slots_query);
 ?>
 
@@ -34,8 +38,8 @@ $slots_result = $conn->query($slots_query);
             </div>
 
             <!-- Main Content -->
-            <div class="col-md-9 col-lg-10 py-4">
-                <div class="card shadow mx-3"> <!-- Use mx-3 for some horizontal margin -->
+            <div class="col-md-9 col-lg-10 py-4 justify-content-center">
+                <div class="card shadow mx-3"> 
                     <div class="card-header bg-primary text-white">
                         <h4 class="mb-0">Add Vehicle</h4>
                     </div>
@@ -73,7 +77,43 @@ $slots_result = $conn->query($slots_query);
 
         </div>
     </div>
-</body>
 
+    <?php if ($success_msg): ?>
+        <div class="toast-container position-fixed bottom-0 end-0 p-3">
+            <div class="toast align-items-center text-bg-success border-0 show" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <?= htmlspecialchars($success_msg) ?>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
+
+    <?php if ($error_msg): ?>
+        <div class="toast-container position-fixed bottom-0 end-0 p-3">
+            <div class="toast align-items-center text-bg-danger border-0 show" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <?= htmlspecialchars($error_msg) ?>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const toastElList = [].slice.call(document.querySelectorAll('.toast'));
+            toastElList.forEach(function(toastEl) {
+                const toast = new bootstrap.Toast(toastEl);
+                toast.show();
+            });
+        });
+    </script>
+
+</body>
 
 </html>

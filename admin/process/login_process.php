@@ -16,16 +16,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if ($result && $result->num_rows > 0) {
         $admin = $result->fetch_assoc();
 
-        // Now verify password (hashed comparison)
         if (password_verify($password, $admin['password'])) {
             $_SESSION['admin_logged_in'] = true;
             header("Location: ../dashboard.php");
-            exit; // Always exit after redirection
+            exit;
         } else {
-            echo "Invalid password.";
+            $_SESSION['login_error'] = "Invalid password.";
+            header("Location: ../../index.php");
+            exit;
         }
     } else {
-        echo "Invalid username.";
+        $_SESSION['login_error'] = "Invalid username.";
+        header("Location: ../../index.php");
+        exit;
     }
 
     $stmt->close(); // Close prepared statement

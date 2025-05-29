@@ -3,88 +3,122 @@ session_start();
 require_once '../../config/db.php';
 require_once '../../vendor/tecnickcom/tcpdf/tcpdf.php'; // Include TCPDF properly
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['slot_number'])) {
-    $slot_number = intval($_POST['slot_number']);
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['slot_id'])) {
+    $slot_id = intval($_POST['slot_id']);
     $out_time = date("Y-m-d H:i:s");
 
-    // Step 1: Get vehicle info from parking_slots
-    $query = "SELECT vehicle_reg_number, vehicle_type, in_time FROM parking_slots WHERE slot_number = ? AND status = 'occupied'";
-    if ($stmt = $conn->prepare($query)) {
-        $stmt->bind_param("i", $slot_number);
+    // Step 1: Fetch parked vehicle info and calculate fee in one query
+    $fee_calc_query = "
+        SELECT 
+            pi.id,
+            pi.registration_number, 
+            v.vehicle_type, 
+            pi.in_time,
+            TIMESTAMPDIFF(MINUTE, pi.in_time, ?) AS minutes_parked,
+            CEIL(TIMESTAMPDIFF(MINUTE, pi.in_time, ?) / 60) AS hours_parked,
+            f.first_hour_charge, 
+            f.rest_hour_charge,
+            CASE 
+              WHEN CEIL(TIMESTAMPDIFF(MINUTE, pi.in_time, ?) / 60) <= 1 THEN f.first_hour_charge
+              ELSE f.first_hour_charge + (CEIL(TIMESTAMPDIFF(MINUTE, pi.in_time, ?) / 60) - 1) * f.rest_hour_charge
+            END AS parking_fee
+        FROM parks_in pi
+        JOIN vehicle v ON pi.registration_number = v.registration_number
+        JOIN fee f ON v.vehicle_type = f.vehicle_type
+        WHERE pi.slot_id = ? AND pi.out_time IS NULL
+        ORDER BY f.created_at DESC
+        LIMIT 1
+    ";
+
+    if ($stmt = $conn->prepare($fee_calc_query)) {
+        // Bind current time 4 times + slot_id once
+        $stmt->bind_param("ssssi", $out_time, $out_time, $out_time, $out_time, $slot_id);
         $stmt->execute();
-        $stmt->bind_result($reg_number, $vehicle_type, $in_time);
+        $stmt->bind_result(
+            $parks_in_id,
+            $reg_number,
+            $vehicle_type,
+            $in_time,
+            $minutes_parked,
+            $hours_parked,
+            $first_hour_charge,
+            $rest_hour_charge,
+            $parking_fee
+        );
         $stmt->fetch();
         $stmt->close();
 
-        if ($reg_number) {
-            // Step 2: Get fees from fee table based on vehicle_type
-            $fee_query = "SELECT first_hour_charge, next_hour_charge FROM fee WHERE vehicle_type = ?";
-            if ($fee_stmt = $conn->prepare($fee_query)) {
-                $fee_stmt->bind_param("s", $vehicle_type);
-                $fee_stmt->execute();
-                $fee_stmt->bind_result($first_hour_charge, $next_hour_charge);
-                $fee_stmt->fetch();
-                $fee_stmt->close();
+        if (!$reg_number) {
+            die("No vehicle currently parked in slot $slot_id.");
+        }
 
-                // Step 3: Calculate parking fee
-                $in_timestamp = strtotime($in_time);
-                $out_timestamp = strtotime($out_time);
-                $hours_parked = ceil(($out_timestamp - $in_timestamp) / 3600);
+        // Begin transaction
+        $conn->begin_transaction();
 
-                if ($hours_parked <= 1) {
-                    $parking_fee = $first_hour_charge;
-                } else {
-                    $parking_fee = $first_hour_charge + (($hours_parked - 1) * $next_hour_charge);
-                }
+        try {
+            // Update parks_in to set out_time, fee, and receipt_path (receipt path will be set after PDF generation)
+            $update_parks_in = "UPDATE parks_in SET out_time = ?, fee = ? WHERE id = ?";
+            $upd_parks_stmt = $conn->prepare($update_parks_in);
+            $upd_parks_stmt->bind_param("sdi", $out_time, $parking_fee, $parks_in_id);
+            $upd_parks_stmt->execute();
+            $upd_parks_stmt->close();
 
-                // Step 4: Update parking_slots table (free the slot)
-                $update_query = "UPDATE parking_slots SET status = 'unoccupied', vehicle_reg_number = NULL, vehicle_type = NULL, in_time = NULL, out_time = NULL WHERE slot_number = ?";
-                if ($update_stmt = $conn->prepare($update_query)) {
-                    $update_stmt->bind_param("i", $slot_number);
-                    $update_stmt->execute();
-                    $update_stmt->close();
-                }
+            // Update parking_slot to mark unoccupied
+            $update_slot = "UPDATE parking_slot SET status = 'unoccupied' WHERE slot_id = ?";
+            $upd_slot_stmt = $conn->prepare($update_slot);
+            $upd_slot_stmt->bind_param("i", $slot_id);
+            $upd_slot_stmt->execute();
+            $upd_slot_stmt->close();
 
-                // Step 5: Update parked_vehicles table (set out_time and fee)
-                $update_parked_query = "UPDATE parked_vehicles SET out_time = ?, fee = ? WHERE reg_number = ? AND out_time IS NULL";
-                if ($update_parked_stmt = $conn->prepare($update_parked_query)) {
-                    $update_parked_stmt->bind_param("sis", $out_time, $parking_fee, $reg_number);
-                    $update_parked_stmt->execute();
-                    $update_parked_stmt->close();
-                }
-
-                // Step 6: Generate PDF receipt
-                $receipts_dir = __DIR__ . "/../receipts";
-                if (!is_dir($receipts_dir)) {
-                    mkdir($receipts_dir, 0777, true);
-                }
-
-                $pdf = new TCPDF();
-                $pdf->AddPage();
-                $pdf->SetFont('dejavusans', '', 12);
-                $pdf->Cell(0, 10, "Parking Receipt", 0, 1, 'C');
-                $pdf->Ln(5);
-                $pdf->Cell(0, 10, "Vehicle Reg. No: $reg_number", 0, 1);
-                $pdf->Cell(0, 10, "Vehicle Type: $vehicle_type", 0, 1);
-                $pdf->Cell(0, 10, "In Time: $in_time", 0, 1);
-                $pdf->Cell(0, 10, "Out Time: $out_time", 0, 1);
-                $pdf->Cell(0, 10, "Total Hours Parked: $hours_parked", 0, 1);
-                $pdf->Cell(0, 10, "Total Fee: ₹ " . number_format($parking_fee, 2), 0, 1);
-
-                $file_path = $receipts_dir . "/receipt_$reg_number.pdf";
-                $pdf->Output($file_path, "F");
-
-                // Redirect with success and receipt link
-                header("Location: ../view_slots.php?success=Vehicle+removed+successfully!&receipt=receipts/receipt_$reg_number.pdf");
-                exit;
-            } else {
-                echo "Error fetching fee details: " . $conn->error;
+            // Generate PDF receipt
+            $receipts_dir = __DIR__ . "/../receipts";
+            if (!is_dir($receipts_dir)) {
+                mkdir($receipts_dir, 0777, true);
             }
-        } else {
-            echo "No occupied vehicle found for this slot.";
+
+            $pdf = new TCPDF();
+            $pdf->AddPage();
+            $pdf->SetFont('dejavusans', '', 12);
+            $pdf->Cell(0, 10, "Parking Receipt", 0, 1, 'C');
+            $pdf->Ln(5);
+            $pdf->Cell(0, 10, "Vehicle Reg. No: $reg_number", 0, 1);
+            $pdf->Cell(0, 10, "Vehicle Type: $vehicle_type", 0, 1);
+            $pdf->Cell(0, 10, "In Time: $in_time", 0, 1);
+            $pdf->Cell(0, 10, "Out Time: $out_time", 0, 1);
+            $pdf->Cell(0, 10, "Total Minutes Parked: $minutes_parked", 0, 1);
+            $pdf->Cell(0, 10, "Total Hours Parked (rounded): $hours_parked", 0, 1);
+            $pdf->Cell(0, 10, "First Hour Charge: ₹ " . number_format($first_hour_charge, 2), 0, 1);
+            $pdf->Cell(0, 10, "Subsequent Hour Charges: ₹ " . number_format($rest_hour_charge, 2), 0, 1);
+            $pdf->Cell(0, 10, "Total Parking Fee: ₹ " . number_format($parking_fee, 2), 0, 1);
+
+            $file_name = "receipt_{$reg_number}_" . time() . ".pdf";
+            $file_path = $receipts_dir . "/" . $file_name;
+            $pdf->Output($file_path, "F");
+
+            // Update parks_in record with receipt path
+            $receipt_db_path = "receipts/" . $file_name; // relative path to store in DB
+            $upd_receipt_stmt = $conn->prepare("UPDATE parks_in SET receipt_path = ? WHERE id = ?");
+            $upd_receipt_stmt->bind_param("si", $receipt_db_path, $parks_in_id);
+            $upd_receipt_stmt->execute();
+            $upd_receipt_stmt->close();
+
+            // Commit transaction
+            $conn->commit();
+
+            // Redirect with success message and receipt link
+            // header("Location: ../view_slots.php?success=Vehicle+removed+successfully!&receipt=$receipt_db_path");
+            $_SESSION['receipt_success'] = "Vehicle removed successfully!";
+            $_SESSION['receipt_path'] = $receipt_db_path;
+
+            header("Location: ../view_slots.php");
+            exit;
+        } catch (Exception $e) {
+            $conn->rollback();
+            echo "Transaction failed: " . $e->getMessage();
         }
     } else {
-        echo "Error preparing statement: " . $conn->error;
+        echo "Failed to prepare statement: " . $conn->error;
     }
+} else {
+    echo "Invalid request.";
 }
-?>

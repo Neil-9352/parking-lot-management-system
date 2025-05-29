@@ -16,3 +16,5 @@ admin/receipts/
 
 # Ignore Composer vendor directory
 vendor/
+
+test_db.php
