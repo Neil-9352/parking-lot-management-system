@@ -24,7 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['slot_id'])) {
             END AS parking_fee
         FROM parks_in pi
         JOIN vehicle v ON pi.registration_number = v.registration_number
-        JOIN fee f ON v.vehicle_type = f.vehicle_type
+        JOIN fee f ON pi.fee_id = f.fee_id
         WHERE pi.slot_id = ? AND pi.out_time IS NULL
         ORDER BY f.created_at DESC
         LIMIT 1
