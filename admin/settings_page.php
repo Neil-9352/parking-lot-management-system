@@ -2,6 +2,11 @@
 session_start();
 require_once '../config/db.php';
 
+if (!isset($_SESSION['admin_logged_in'])) {
+    header("Location: ../index.php");
+    exit;
+}
+
 // Handle Password Change
 if (isset($_POST['change_password'])) {
     $new_password = trim($_POST['new_password']);

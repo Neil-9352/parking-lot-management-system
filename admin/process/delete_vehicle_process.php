@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once '../../config/db.php';
-require_once '../../vendor/tecnickcom/tcpdf/tcpdf.php'; // Include TCPDF properly
+require_once '../../vendor/tecnickcom/tcpdf/tcpdf.php';
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['slot_id'])) {
     $slot_id = intval($_POST['slot_id']);
