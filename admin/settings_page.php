@@ -1,103 +1,30 @@
 <?php
 session_start();
-require_once '../config/db.php';
-
 if (!isset($_SESSION['admin_logged_in'])) {
     header("Location: ../index.php");
     exit;
 }
 
-// Handle Password Change
-if (isset($_POST['change_password'])) {
-    $new_password = trim($_POST['new_password']);
-    $confirm_password = trim($_POST['confirm_password']);
-
-    if ($new_password !== $confirm_password) {
-        $password_error = "Passwords do not match.";
-    } elseif (strlen($new_password) < 6) {
-        $password_error = "Password must be at least 6 characters.";
-    } else {
-        $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
-        $stmt = $conn->prepare("UPDATE admin SET password = ? WHERE id = 1");
-        $stmt->bind_param("s", $hashed_password);
-        $stmt->execute();
-        $password_success = "Password updated successfully.";
-    }
+// Redirect to backend to fetch data if not set
+if (!isset($_SESSION['admin_data'])) {
+    header("Location: ./process/settings_page_process.php?fetch_only=1");
+    exit;
 }
 
-// Fetch current slot count
-$current_slot_count = 0;
-$slot_count_result = $conn->query("SELECT COUNT(*) AS total FROM parking_slot");
-if ($slot_count_result) {
-    $row = $slot_count_result->fetch_assoc();
-    $current_slot_count = intval($row['total']);
-}
+// Get data from session
+$admin_data = $_SESSION['admin_data'];
+$current_slot_count = $admin_data['slot_count'];
+$fee_data = $admin_data['fees'];
 
-// Handle Slot Sync
-if (isset($_POST['sync_and_update_slots'])) {
-    $total_slots = intval($_POST['total_slots']);
-    if ($total_slots < 1) {
-        $slot_error = "Total slots must be at least 1.";
-    } else {
-        if ($total_slots > $current_slot_count) {
-            $slots_to_add = $total_slots - $current_slot_count;
-            for ($i = 1; $i <= $slots_to_add; $i++) {
-                $new_slot_number = $current_slot_count + $i;
-                $stmt = $conn->prepare("INSERT INTO parking_slot (slot_number, status) VALUES (?, 'unoccupied')");
-                $stmt->bind_param("i", $new_slot_number);
-                $stmt->execute();
-            }
-            $slot_success = "$slots_to_add new slots added.";
-        } elseif ($total_slots < $current_slot_count) {
-            $slots_to_remove = $current_slot_count - $total_slots;
-            $conn->query("DELETE FROM parking_slot ORDER BY slot_number DESC LIMIT $slots_to_remove");
-            $slot_success = "$slots_to_remove slots removed.";
-        } else {
-            $slot_success = "Slot count is already correct.";
-        }
-        // Update current count
-        $current_slot_count = $total_slots;
-    }
-}
+// Flash messages
+$password_success = $_SESSION['flash']['password_success'] ?? NULL;
+$password_error   = $_SESSION['flash']['password_error'] ?? NULL;
+$slot_success     = $_SESSION['flash']['slot_success'] ?? NULL;
+$slot_error       = $_SESSION['flash']['slot_error'] ?? NULL;
+$fee_success      = $_SESSION['flash']['fee_success'] ?? NULL;
 
-// Handle Fee Update
-if (isset($_POST['update_fee'])) {
-    $fees = [
-        '2-wheeler' => [
-            'first_hour' => floatval($_POST['fee_2w_first']),
-            'next_hour' => floatval($_POST['fee_2w_next']),
-        ],
-        '4-wheeler' => [
-            'first_hour' => floatval($_POST['fee_4w_first']),
-            'next_hour' => floatval($_POST['fee_4w_next']),
-        ]
-    ];
-
-    foreach ($fees as $type => $data) {
-        $stmt = $conn->prepare("
-            INSERT INTO fee (vehicle_type, first_hour_charge, rest_hour_charge)
-            VALUES (?, ?, ?)
-            ON DUPLICATE KEY UPDATE 
-                first_hour_charge = VALUES(first_hour_charge),
-                rest_hour_charge = VALUES(rest_hour_charge)");
-        $stmt->bind_param("sdd", $type, $data['first_hour'], $data['next_hour']);
-        $stmt->execute();
-    }
-    $fee_success = "Fee settings updated successfully.";
-}
-
-// Fetch current fees
-$fee_data = [
-    '2-wheeler' => ['first_hour' => '', 'next_hour' => ''],
-    '4-wheeler' => ['first_hour' => '', 'next_hour' => '']
-];
-$res = $conn->query("SELECT * FROM fee");
-while ($row = $res->fetch_assoc()) {
-    $fee_data[$row['vehicle_type']] = [
-        'first_hour' => $row['first_hour_charge'],
-        'next_hour' => $row['rest_hour_charge']
-    ];
-}
+// Clear flash and admin_data (optional, keep for next reload)
+unset($_SESSION['flash'], $_SESSION['admin_data']);
 ?>
 
 <!DOCTYPE html>
@@ -127,7 +54,7 @@ while ($row = $res->fetch_assoc()) {
                         <h3>Change Password</h3>
                         <?php if (isset($password_success)) echo "<div class='alert alert-success'>$password_success</div>"; ?>
                         <?php if (isset($password_error)) echo "<div class='alert alert-danger'>$password_error</div>"; ?>
-                        <form method="POST" class="needs-validation" novalidate>
+                        <form method="POST" action="./process/settings_page_process.php" class="needs-validation" novalidate>
                             <div class="mb-3">
                                 <label for="new_password" class="form-label">New Password</label>
                                 <input type="password" class="form-control" id="new_password" name="new_password" required />
@@ -147,7 +74,7 @@ while ($row = $res->fetch_assoc()) {
                         <h3>Manage Parking Slots</h3>
                         <?php if (isset($slot_success)) echo "<div class='alert alert-success'>$slot_success</div>"; ?>
                         <?php if (isset($slot_error)) echo "<div class='alert alert-danger'>$slot_error</div>"; ?>
-                        <form method="POST" class="needs-validation" novalidate>
+                        <form method="POST" action="./process/settings_page_process.php" class="needs-validation" novalidate>
                             <div class="mb-3">
                                 <label for="total_slots" class="form-label">Total Slots</label>
                                 <input type="number" min="1" class="form-control" id="total_slots" name="total_slots" value="<?= $current_slot_count ?>" required />
@@ -162,7 +89,7 @@ while ($row = $res->fetch_assoc()) {
                     <section class="mb-5">
                         <h3>Update Fee Settings</h3>
                         <?php if (isset($fee_success)) echo "<div class='alert alert-success'>$fee_success</div>"; ?>
-                        <form method="POST" class="needs-validation" novalidate>
+                        <form method="POST" action="./process/settings_page_process.php" class="needs-validation" novalidate>
                             <div class="mb-4">
                                 <h4>2-Wheeler</h4>
                                 <div class="mb-3">
