@@ -42,8 +42,9 @@ if (!isset($_SESSION['admin_logged_in'])) {
         <div class="row justify-content-center">
             <div class="col-md-6">
                 <div class="list-group shadow">
-                    <a href="add_vehicle.php" class="list-group-item list-group-item-action">🚗 Add Vehicle</a>
+                    <a href="auto_entry.php" class="list-group-item list-group-item-action">🚗 Add Vehicle</a>
                     <a href="view_slots.php" class="list-group-item list-group-item-action">📋 View Slots</a>
+                    <a href="auto_delete.php" class="list-group-item list-group-item-action">🗑️ Delete Vehicle</a>
                     <a href="report.php" class="list-group-item list-group-item-action">📊 Report</a>
                     <a href="settings_page.php" class="list-group-item list-group-item-action">⚙️ Settings</a>
                 </div>

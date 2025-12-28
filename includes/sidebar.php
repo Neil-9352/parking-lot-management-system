@@ -4,7 +4,10 @@
         <h4 class="text-center mb-4">Admin Panel</h4>
         <ul class="nav flex-column">
             <li class="nav-item mb-2">
-                <a class="nav-link text-white" href="add_vehicle.php">🚗 Add Vehicle</a>
+                <a class="nav-link text-white" href="auto_entry.php">🚗 Add Vehicle</a>
+            </li>
+            <li class="nav-item mb-2">
+                <a class="nav-link text-white" href="auto_delete.php">🗑️ Delete Vehicle</a>
             </li>
             <li class="nav-item mb-2">
                 <a class="nav-link text-white" href="view_slots.php">📊 View Slots</a>
@@ -20,4 +23,4 @@
             </li>
         </ul>
     </div>
-</div>
+</div>3
