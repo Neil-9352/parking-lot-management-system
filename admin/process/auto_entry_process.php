@@ -1,13 +1,10 @@
 <?php
 // auto_entry_process.php
-// Receives image_base64 (JSON) from auto_entry.php, calls recognition API on localhost:8000,
-// then inserts vehicle into DB and returns assigned slot as JSON.
 
 session_start();
 header('Content-Type: application/json');
 
-require_once '../../config/db.php'; // adjust path if your project structure differs
-// $conn is expected to be a mysqli connection from db.php
+require_once '../../config/db.php';
 
 // Helper: send JSON response and exit
 function respond($data, $http_status = 200)
@@ -37,28 +34,19 @@ if (empty($input['image_base64'])) {
 
 $image_base64 = $input['image_base64'];
 
-// Optional: if frontend already sent reg_number & vehicle_type (when frontend calls recognizer itself),
-// accept and skip calling recognizer. But per your request we'll call the recognition API server-side.
-// If you want to support the other flow, you can provide reg_number/vehicle_type in the request and
-// set $skip_recognizer = true.
+
 $skip_recognizer = false;
 $reg_number_override = null;
 $vehicle_type_override = null;
 if (!empty($input['reg_number']) && !empty($input['vehicle_type'])) {
-    // If you want always to run recognizer, comment out this block.
-    $skip_recognizer = false; // keep false to always call recognizer
-    // If you want to use frontend-recognized values, set to true and uncomment:
-    // $skip_recognizer = true;
-    // $reg_number_override = strtoupper(trim($input['reg_number']));
-    // $vehicle_type_override = $input['vehicle_type'];
+    $skip_recognizer = false;
 }
 
 $plate = null;
 $vehicle_type = null;
 
-// 1) Call recognition API unless skipped
 if (!$skip_recognizer) {
-    $rec_url = 'https://localhost:8000/api/detect'; // your FastAPI endpoint
+    $rec_url = 'https://localhost:8000/api/detect'; 
     $payload = json_encode(['image_base64' => $image_base64]);
 
     $ch = curl_init($rec_url);
@@ -99,7 +87,7 @@ if (!$skip_recognizer) {
         respond(['error' => 'Recognition service returned HTTP ' . $rec_http, 'details' => $rec_json], 502);
     }
 
-    // success: expect {"plate":"MH12AB1234", "type":"car"}
+    // success: expect {"plate":"AS01AB1234", "type":"car"}
     if (empty($rec_json['plate']) || empty($rec_json['type'])) {
         respond(['error' => 'Recognition returned incomplete data'], 502);
     }
@@ -202,10 +190,6 @@ try {
     // Commit transaction
     $conn->commit();
 
-    // Optionally, you may want to store the captured image on server or in DB.
-    // This script currently does NOT store the image; if you want to save it,
-    // decode $image_base64 and write to disk or to a DB blob column here.
-
     // Return success with assigned slot and recognized items to frontend
     respond(['plate' => $plate, 'type' => $vehicle_type_mapped, 'slot' => $slot_number], 200);
 } catch (Exception $e) {
@@ -214,6 +198,5 @@ try {
         // If connection exists and autocommit is disabled due to begin_transaction
         @$conn->rollback();
     }
-    // For security avoid exposing raw DB errors in production; here we include the message for debugging
     respond(['error' => 'Server error: ' . $e->getMessage()], 500);
 }

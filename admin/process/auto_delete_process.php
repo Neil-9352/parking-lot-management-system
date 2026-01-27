@@ -88,7 +88,7 @@ $type_map = [
 $vehicle_type_mapped = $type_map[$rec_type] ?? $rec_type;
 
 try {
-    // 1) Find active parks_in entry for the detected plate
+    // Find active parks_in entry for the detected plate
     $q = "
       SELECT pi.id, pi.registration_number, pi.slot_id, pi.in_time, pi.fee_id, s.slot_number
       FROM parks_in pi
@@ -151,26 +151,47 @@ try {
     }
 
     $fee_calc_query = "
-        SELECT 
-            pi.id,
-            pi.registration_number, 
-            v.vehicle_type, 
-            pi.in_time,
-            TIMESTAMPDIFF(MINUTE, pi.in_time, ?) AS minutes_parked,
-            CEIL(TIMESTAMPDIFF(MINUTE, pi.in_time, ?) / 60) AS hours_parked,
-            f.first_hour_charge, 
-            f.rest_hour_charge,
-            CASE 
-              WHEN CEIL(TIMESTAMPDIFF(MINUTE, pi.in_time, ?) / 60) <= 1 THEN f.first_hour_charge
-              ELSE f.first_hour_charge + (CEIL(TIMESTAMPDIFF(MINUTE, pi.in_time, ?) / 60) - 1) * f.rest_hour_charge
-            END AS parking_fee
-        FROM parks_in pi
-        JOIN vehicle v ON pi.registration_number = v.registration_number
-        JOIN fee f ON pi.fee_id = f.fee_id
-        WHERE pi.id = ?
-        ORDER BY f.created_at DESC
-        LIMIT 1
-    ";
+            SELECT 
+                pi.id,
+                pi.registration_number, 
+                v.vehicle_type, 
+                pi.in_time,
+
+                CEIL(TIMESTAMPDIFF(SECOND, pi.in_time, ?) / 60) AS minutes_parked,
+
+                GREATEST(
+                    1,
+                    CEIL(TIMESTAMPDIFF(SECOND, pi.in_time, ?) / 3600)
+                ) AS hours_parked,
+
+                f.first_hour_charge, 
+                f.rest_hour_charge,
+
+                CASE 
+                    WHEN GREATEST(
+                            1,
+                            CEIL(TIMESTAMPDIFF(SECOND, pi.in_time, ?) / 3600)
+                        ) = 1
+                    THEN f.first_hour_charge
+                    ELSE
+                        f.first_hour_charge +
+                        (
+                            GREATEST(
+                                1,
+                                CEIL(TIMESTAMPDIFF(SECOND, pi.in_time, ?) / 3600)
+                            ) - 1
+                        ) * f.rest_hour_charge
+                END AS parking_fee
+
+            FROM parks_in pi
+            JOIN vehicle v ON pi.registration_number = v.registration_number
+            JOIN fee f ON pi.fee_id = f.fee_id
+
+            WHERE pi.id = ?
+
+            ORDER BY f.created_at DESC
+            LIMIT 1;
+";
 
     $out_time = date("Y-m-d H:i:s");
     $stmt_fee = $conn->prepare($fee_calc_query);

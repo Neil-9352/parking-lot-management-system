@@ -207,6 +207,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
                         mPlate.textContent = '—';
                         mType.textContent = '—';
                         mSlot.textContent = '—';
+                        mSuccess.textContent = '';
                         bsModal.show();
                         return;
                     }
