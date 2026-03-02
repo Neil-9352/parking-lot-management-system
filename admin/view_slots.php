@@ -35,7 +35,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
                             <h4 class="mb-0">Parking Lot Overview</h4>
                         </div>
                         <div class="card-body">
-                            <div class="table-responsive">
+                            <!-- <div class="table-responsive">
                                 <table class="table table-bordered table-striped">
                                     <thead class="table-dark">
                                         <tr>
@@ -102,8 +102,105 @@ if (!isset($_SESSION['admin_logged_in'])) {
                                         ?>
                                     </tbody>
                                 </table>
-                            </div>
+                            </div> -->
 
+                            <div class="row g-4">
+                                <?php
+                                $query = "
+    SELECT 
+        ps.slot_id,
+        ps.slot_number,
+        v.registration_number,
+        v.vehicle_type,
+        pi.in_time
+    FROM parking_slot ps
+    LEFT JOIN parks_in pi 
+        ON ps.slot_id = pi.slot_id AND pi.out_time IS NULL
+    LEFT JOIN vehicle v 
+        ON pi.registration_number = v.registration_number
+    ORDER BY ps.slot_number;
+";
+
+                                $result = $conn->query($query);
+
+                                if ($result && $result->num_rows > 0):
+                                    while ($row = $result->fetch_assoc()):
+                                        $isOccupied = !is_null($row['registration_number']);
+
+                                        // Card styles
+                                        $cardClass = $isOccupied ? 'border-danger bg-danger-subtle' : 'border-success bg-success-subtle';
+                                        $statusText = $isOccupied ? 'Occupied' : 'Unoccupied';
+
+                                        // Icons
+                                        if ($isOccupied) {
+                                            if ($row['vehicle_type'] === '2-wheeler') {
+                                                $icon = '../assets/motorcycle.png';
+                                            } else {
+                                                $icon = '../assets/car.png';
+                                            }
+                                        } else {
+                                            $icon = '../assets/not-available-circle.png';
+                                        }
+
+                                ?>
+                                        <div class="col-sm-6 col-md-4 col-lg-3">
+                                            <div class="card h-100 <?= $cardClass ?> shadow-sm">
+                                                <div class="card-body text-center">
+                                                    <h5 class="card-title">
+                                                        Slot <?= htmlspecialchars($row['slot_number']) ?>
+                                                    </h5>
+
+                                                    <div class="mb-3">
+                                                        <img
+                                                            src="<?= htmlspecialchars($icon) ?>"
+                                                            alt="Vehicle Icon"
+                                                            style="width:64px; height:64px;">
+                                                    </div>
+
+
+                                                    <!-- <p class="fw-bold">
+                                                        <?= $statusText ?>
+                                                    </p> -->
+
+                                                    <?php if ($isOccupied): ?>
+                                                        <p class="mb-1">
+                                                            <strong>Reg:</strong><br>
+                                                            <?= htmlspecialchars($row['registration_number']) ?>
+                                                        </p>
+
+                                                        <!-- <p class="mb-1">
+                                                            <strong>Type:</strong><br>
+                                                            <?= htmlspecialchars($row['vehicle_type']) ?>
+                                                        </p> -->
+
+                                                        <p class="mb-3">
+                                                            <strong>In Time:</strong><br>
+                                                            <?= htmlspecialchars($row['in_time']) ?>
+                                                        </p>
+
+                                                        <form action="process/delete_vehicle_process.php" method="POST">
+                                                            <input type="hidden" name="slot_id" value="<?= intval($row['slot_id']) ?>">
+                                                            <button type="submit" class="btn btn-danger btn-sm w-100">
+                                                                Remove Vehicle
+                                                            </button>
+                                                        </form>
+                                                    <?php else: ?>
+                                                        <p class="text-muted mt-3">
+                                                            No vehicle parked
+                                                        </p>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    <?php
+                                    endwhile;
+                                else:
+                                    ?>
+                                    <div class="col-12 text-center">
+                                        <p>No parking slots found.</p>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
 
                         </div>
                     </div>

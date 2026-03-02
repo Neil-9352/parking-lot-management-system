@@ -1,11 +1,22 @@
 <?php
 session_start();
+require_once 'config/db.php';
+
 if (isset($_SESSION['admin_logged_in'])) {
     header("Location: admin/dashboard.php");
     exit;
 }
 $error = $_SESSION['login_error'] ?? null;
 unset($_SESSION['login_error']);
+
+// Fetch parking lots
+$lots = [];
+$result = $conn->query("SELECT lot_id, lot_name FROM parking_lot ORDER BY lot_name ASC");
+if ($result) {
+    while ($row = $result->fetch_assoc()) {
+        $lots[] = $row;
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -29,7 +40,7 @@ unset($_SESSION['login_error']);
         <div class="card shadow-sm p-4" style="width: 100%; max-width: 400px;">
             <div class="card-body">
                 <h4 class="card-title text-center text-primary mb-4">Admin Login</h4>
-                <form method="POST" action="admin/process/login_process.php">
+                <!-- <form method="POST" action="admin/process/login_process.php">
                     <div class="mb-3">
                         <label for="username" class="form-label">Username</label>
                         <input type="text" class="form-control" id="username" name="username" value="admin" readonly>
@@ -41,7 +52,37 @@ unset($_SESSION['login_error']);
                     <div class="d-grid">
                         <button type="submit" class="btn btn-primary">Login</button>
                     </div>
+                </form> -->
+                <form method="POST" action="admin/process/login_process.php">
+
+                    <div class="mb-3">
+                        <label for="lot_id" class="form-label">Select Parking Lot</label>
+                        <select class="form-select" name="lot_id" required>
+                            <option value="">-- Select Lot --</option>
+                            <?php foreach ($lots as $lot): ?>
+                                <option value="<?= $lot['lot_id'] ?>">
+                                    <?= htmlspecialchars($lot['lot_name']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Username</label>
+                        <input type="text" class="form-control" name="username" value="admin" readonly>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password</label>
+                        <input type="password" class="form-control" name="password" required>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">Login</button>
+                    </div>
+
                 </form>
+
             </div>
         </div>
     </div>

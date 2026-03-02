@@ -6,6 +6,8 @@ if (!isset($_SESSION['admin_logged_in'])) {
     header("Location: ../index.php");
     exit;
 }
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 
 $vehicleRegFilter = $_GET['reg_number'] ?? '';
 $dateFilter = $_GET['date'] ?? '';
@@ -15,7 +17,7 @@ $fromDate = $_GET['from_date'] ?? '';
 $toDate = $_GET['to_date'] ?? '';
 
 // Build base query with joins
-$sql = "SELECT pi.*, v.vehicle_type, f.first_hour_charge, f.rest_hour_charge, f.created_at AS fee_created_at
+$sql = "SELECT pi.*, v.type, f.first_hour_charge, f.rest_hour_charge, f.created_at AS fee_created_at
         FROM parks_in pi
         LEFT JOIN vehicle v ON pi.registration_number = v.registration_number
         LEFT JOIN fee f ON pi.fee_id = f.fee_id

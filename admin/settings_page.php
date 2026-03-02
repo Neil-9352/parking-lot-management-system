@@ -5,6 +5,9 @@ if (!isset($_SESSION['admin_logged_in'])) {
     exit;
 }
 
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
 // Redirect to backend to fetch data if not set
 if (!isset($_SESSION['admin_data'])) {
     header("Location: ./process/settings_page_process.php?fetch_only=1");
