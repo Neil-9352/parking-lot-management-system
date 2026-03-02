@@ -163,10 +163,10 @@ try {
     // =====================
     $insert_stmt = $conn->prepare("
         INSERT INTO parks_in 
-        (registration_number, slot_id, in_time, fee_id) 
+        (registration_number, slot_id, lot_id, in_time, fee_id) 
         VALUES (?, ?, ?, ?)
     ");
-    $insert_stmt->bind_param("sisi", $plate, $slot_id, $in_time, $fee_id);
+    $insert_stmt->bind_param("siisi", $plate, $slot_id, $lot_id, $in_time, $fee_id);
     $insert_stmt->execute();
     $insert_stmt->close();
 

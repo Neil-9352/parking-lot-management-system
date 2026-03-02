@@ -86,10 +86,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         // 5️⃣ Insert parking record
         $stmt = $conn->prepare("
             INSERT INTO parks_in 
-            (registration_number, slot_id, in_time, fee_id) 
-            VALUES (?, ?, ?, ?)
+            (registration_number, slot_id, lot_id, in_time, fee_id) 
+            VALUES (?, ?, ?, ?, ?)
         ");
-        $stmt->bind_param("sisi", $reg_number, $slot_id, $in_time, $fee_id);
+        $stmt->bind_param("siisi", $reg_number, $slot_id, $lot_id, $in_time, $fee_id);
 
         if (!$stmt->execute()) {
             throw new Exception("Error inserting parking entry.");
