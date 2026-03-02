@@ -7,9 +7,6 @@ if (!isset($_SESSION['admin_logged_in'])) {
     exit;
 }
 
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
 if (!isset($_SESSION['lot_id'])) {
     header("Location: ../index.php");
     exit;
@@ -39,7 +36,6 @@ $stmt->bind_param("i", $lot_id);
 $stmt->execute();
 $result = $stmt->get_result();
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 
@@ -88,13 +84,12 @@ $result = $stmt->get_result();
                                             $statusText = 'Unoccupied';
                                         }
 
-                                        // Choose icon
                                         if ($status === 'occupied') {
                                             $icon = ($row['type'] === '2-wheeler')
                                                 ? '../assets/motorcycle.png'
                                                 : '../assets/car.png';
                                         } elseif ($status === 'booked') {
-                                            $icon = '../assets/reserved.png'; // optional custom icon
+                                            $icon = '../assets/reserved.png';
                                         } else {
                                             $icon = '../assets/not-available-circle.png';
                                         }
@@ -117,6 +112,7 @@ $result = $stmt->get_result();
                                                     <p class="fw-bold"><?= $statusText ?></p>
 
                                                     <?php if ($status === 'occupied'): ?>
+
                                                         <p class="mb-1">
                                                             <strong>Reg:</strong><br>
                                                             <?= htmlspecialchars($row['registration_number']) ?>
@@ -137,14 +133,17 @@ $result = $stmt->get_result();
                                                         </form>
 
                                                     <?php elseif ($status === 'booked'): ?>
+
                                                         <p class="text-warning mt-3">
                                                             Reserved Slot
                                                         </p>
 
                                                     <?php else: ?>
+
                                                         <p class="text-muted mt-3">
                                                             No vehicle parked
                                                         </p>
+
                                                     <?php endif; ?>
 
                                                 </div>
@@ -153,9 +152,11 @@ $result = $stmt->get_result();
 
                                     <?php endwhile; ?>
                                 <?php else: ?>
+
                                     <div class="col-12 text-center">
                                         <p>No parking slots found for this lot.</p>
                                     </div>
+
                                 <?php endif; ?>
 
                             </div>
@@ -163,24 +164,66 @@ $result = $stmt->get_result();
                     </div>
                 </div>
             </div>
-
         </div>
-    </div>
 
-    <?php
-    // Receipt Modal Logic
-    if (isset($_SESSION['receipt_path']) && isset($_SESSION['receipt_success'])):
-    ?>
-        <script>
-            document.addEventListener('DOMContentLoaded', function() {
-                const receiptModal = new bootstrap.Modal(document.getElementById('receiptModal'));
-                receiptModal.show();
-            });
-        </script>
-    <?php
-        unset($_SESSION['receipt_path'], $_SESSION['receipt_success']);
-    endif;
-    ?>
+        <!-- ================= RECEIPT MODAL ================= -->
+
+        <div class="modal fade" id="receiptModal" tabindex="-1">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+
+                    <div class="modal-header">
+                        <h5 class="modal-title">Vehicle Removal Status</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+
+                    <div class="modal-body">
+                        <p id="receiptMessage"></p>
+                    </div>
+
+                    <div class="modal-footer">
+                        <a href="#" id="downloadReceiptBtn"
+                            class="btn btn-primary"
+                            target="_blank"
+                            download>
+                            Download Receipt
+                        </a>
+                        <button type="button"
+                            class="btn btn-secondary"
+                            data-bs-dismiss="modal">
+                            Close
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <?php
+        // ========= Modal Trigger Logic =========
+        if (isset($_SESSION['receipt_success']) && isset($_SESSION['receipt_path'])):
+        ?>
+
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {
+
+                    document.getElementById('receiptMessage').textContent =
+                        <?= json_encode($_SESSION['receipt_success']); ?>;
+
+                    document.getElementById('downloadReceiptBtn').href =
+                        <?= json_encode($_SESSION['receipt_path']); ?>;
+
+                    const receiptModal = new bootstrap.Modal(
+                        document.getElementById('receiptModal')
+                    );
+                    receiptModal.show();
+                });
+            </script>
+
+        <?php
+            unset($_SESSION['receipt_success'], $_SESSION['receipt_path']);
+        endif;
+        ?>
 
 </body>
 

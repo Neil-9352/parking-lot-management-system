@@ -151,7 +151,7 @@ $fee_result = $conn->query("SELECT * FROM fee ORDER BY fee_id ASC");
                                             <tr>
                                                 <td><?= $row['id'] ?></td>
                                                 <td><?= htmlspecialchars($row['registration_number']) ?></td>
-                                                <td><?= htmlspecialchars($row['vehicle_type'] ?? '-') ?></td>
+                                                <td><?= htmlspecialchars($row['type'] ?? '-') ?></td>
                                                 <td><?= htmlspecialchars($row['slot_id']) ?></td>
                                                 <td><?= htmlspecialchars($row['in_time']) ?></td>
                                                 <td><?= !empty($row['out_time']) ? htmlspecialchars($row['out_time']) : '-' ?></td>
