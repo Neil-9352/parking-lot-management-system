@@ -90,7 +90,7 @@ $result = $stmt->get_result();
 
                                         // Choose icon
                                         if ($status === 'occupied') {
-                                            $icon = ($row['vehicle_type'] === '2-wheeler')
+                                            $icon = ($row['type'] === '2-wheeler')
                                                 ? '../assets/motorcycle.png'
                                                 : '../assets/car.png';
                                         } elseif ($status === 'booked') {
