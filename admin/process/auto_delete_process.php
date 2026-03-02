@@ -203,6 +203,7 @@ try {
 
     respond([
         'status' => 'removed',
+        'type' => $vehicle_type,
         'plate' => $plate,
         'slot' => $slot_no,
         'duration_hours' => (int)$hours_parked,
