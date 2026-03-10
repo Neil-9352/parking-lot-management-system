@@ -67,7 +67,7 @@ if (!empty($toDate)) {
     $types .= "s";
 }
 
-$sql .= " ORDER BY pi.id DESC";
+$sql .= " ORDER BY pi.id ASC";
 
 $stmt = $conn->prepare($sql);
 $stmt->bind_param($types, ...$params);
@@ -98,6 +98,7 @@ $fee_result = $fee_stmt->get_result();
 </head>
 
 <body class="bg-light">
+
     <div class="container-fluid">
         <div class="row">
 
@@ -108,7 +109,9 @@ $fee_result = $fee_stmt->get_result();
 
             <!-- Main -->
             <div class="col-md-9 col-lg-10 py-4 justify-content-center">
+
                 <div class="card mx-3 shadow">
+
                     <div class="card-header bg-primary text-white">
                         <h4 class="mb-0">Vehicle Parking Reports</h4>
                     </div>
@@ -117,6 +120,7 @@ $fee_result = $fee_stmt->get_result();
 
                         <!-- Filters -->
                         <form method="GET" class="row g-3 mb-4">
+
                             <div class="col-md-4">
                                 <label class="form-label">Vehicle Registration Number</label>
                                 <input type="text" class="form-control" name="reg_number"
@@ -157,11 +161,14 @@ $fee_result = $fee_stmt->get_result();
                                 <button type="submit" class="btn btn-success w-50">Filter</button>
                                 <a href="report.php" class="btn btn-secondary w-50">Reset</a>
                             </div>
+
                         </form>
 
-                        <!-- Parks In Table -->
+                        <!-- Vehicle Parking Report -->
                         <div class="table-responsive mb-5">
+
                             <table class="table table-bordered table-striped">
+
                                 <thead class="table-dark">
                                     <tr>
                                         <th>ID</th>
@@ -171,21 +178,34 @@ $fee_result = $fee_stmt->get_result();
                                         <th>In Time</th>
                                         <th>Out Time</th>
                                         <th>Fee (₹)</th>
+                                        <th>Fee ID</th>
                                         <th>Receipt</th>
                                     </tr>
                                 </thead>
+
                                 <tbody>
 
                                     <?php if ($result->num_rows > 0): ?>
+
                                         <?php while ($row = $result->fetch_assoc()): ?>
+
                                             <tr>
                                                 <td><?= $row['id'] ?></td>
+
                                                 <td><?= htmlspecialchars($row['registration_number']) ?></td>
+
                                                 <td><?= htmlspecialchars($row['type'] ?? '-') ?></td>
+
                                                 <td><?= htmlspecialchars($row['slot_id']) ?></td>
+
                                                 <td><?= htmlspecialchars($row['in_time']) ?></td>
+
                                                 <td><?= $row['out_time'] ? htmlspecialchars($row['out_time']) : '-' ?></td>
+
                                                 <td><?= isset($row['fee']) ? number_format($row['fee'], 2) : '-' ?></td>
+
+                                                <td><?= htmlspecialchars($row['fee_id']) ?></td>
+
                                                 <td>
                                                     <?php if (!empty($row['receipt_path'])): ?>
                                                         <a href="<?= htmlspecialchars($row['receipt_path']) ?>"
@@ -197,27 +217,37 @@ $fee_result = $fee_stmt->get_result();
                                                         -
                                                     <?php endif; ?>
                                                 </td>
+
                                             </tr>
+
                                         <?php endwhile; ?>
+
                                     <?php else: ?>
+
                                         <tr>
-                                            <td colspan="8" class="text-center text-muted">
+                                            <td colspan="9" class="text-center text-muted">
                                                 No records found for this lot.
                                             </td>
                                         </tr>
+
                                     <?php endif; ?>
 
                                 </tbody>
+
                             </table>
+
                         </div>
 
                         <?php $stmt->close(); ?>
 
                         <!-- Fee Structure -->
+
                         <h4 class="mb-3">Fee Structure (Current Lot)</h4>
 
                         <div class="table-responsive">
+
                             <table class="table table-bordered table-striped">
+
                                 <thead class="table-dark">
                                     <tr>
                                         <th>Fee ID</th>
@@ -227,28 +257,43 @@ $fee_result = $fee_stmt->get_result();
                                         <th>Created At</th>
                                     </tr>
                                 </thead>
+
                                 <tbody>
 
                                     <?php if ($fee_result && $fee_result->num_rows > 0): ?>
+
                                         <?php while ($fee_row = $fee_result->fetch_assoc()): ?>
+
                                             <tr>
+
                                                 <td><?= $fee_row['fee_id'] ?></td>
+
                                                 <td><?= htmlspecialchars($fee_row['vehicle_type']) ?></td>
+
                                                 <td><?= number_format($fee_row['first_hour_charge'], 2) ?></td>
+
                                                 <td><?= number_format($fee_row['rest_hour_charge'], 2) ?></td>
+
                                                 <td><?= htmlspecialchars($fee_row['created_at']) ?></td>
+
                                             </tr>
+
                                         <?php endwhile; ?>
+
                                     <?php else: ?>
+
                                         <tr>
                                             <td colspan="5" class="text-center text-muted">
                                                 No fee data found for this lot.
                                             </td>
                                         </tr>
+
                                     <?php endif; ?>
 
                                 </tbody>
+
                             </table>
+
                         </div>
 
                     </div>
@@ -257,6 +302,7 @@ $fee_result = $fee_stmt->get_result();
 
         </div>
     </div>
+
 </body>
 
 </html>
