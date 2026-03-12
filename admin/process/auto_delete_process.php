@@ -216,13 +216,20 @@ try {
     $pdf = new TCPDF();
     $pdf->AddPage();
     $pdf->SetFont('dejavusans', '', 12);
+
     $pdf->Cell(0, 10, "Parking Receipt", 0, 1, 'C');
     $pdf->Ln(5);
-    $pdf->Cell(0, 8, "Vehicle: {$plate}", 0, 1);
+
+    $pdf->Cell(0, 8, "Vehicle Reg. No: {$plate}", 0, 1);
+    $pdf->Cell(0, 8, "Vehicle Type: {$vehicle_type}", 0, 1);
     $pdf->Cell(0, 8, "In Time: {$in_time}", 0, 1);
     $pdf->Cell(0, 8, "Out Time: {$out_time}", 0, 1);
-    $pdf->Cell(0, 8, "Hours: {$hours_parked}", 0, 1);
+    $pdf->Cell(0, 8, "Minutes Parked: {$minutes_parked}", 0, 1);
+    $pdf->Cell(0, 8, "Hours Parked (rounded): {$hours_parked}", 0, 1);
+    $pdf->Cell(0, 8, "First Hour: \xe2\x82\xb9 " . number_format($first_hour_charge, 2), 0, 1);
+    $pdf->Cell(0, 8, "Next Hour: \xe2\x82\xb9 " . number_format($rest_hour_charge, 2), 0, 1);
     $pdf->Cell(0, 8, "Total Fee: \xe2\x82\xb9 " . number_format($parking_fee, 2), 0, 1);
+
     if ($booking_id !== null) {
         $pdf->Ln(3);
         $pdf->Cell(0, 8, "--- Booking Details ---", 0, 1, 'C');
@@ -230,6 +237,7 @@ try {
         $pdf->Cell(0, 8, "Deposit Paid: \xe2\x82\xb9 " . number_format($booking_amount, 2), 0, 1);
         $pdf->Cell(0, 8, "Deposit Refund: {$refund_status}", 0, 1);
     }
+
     $pdf->Output($file_path, "F");
 
     $receipt_db_path = "receipts/" . $file_name;
