@@ -99,6 +99,10 @@ if (!isset($_SESSION['admin_logged_in'])) {
                     <p><strong>Slot:</strong> <span id="mSlot">—</span></p>
                     <p><strong>Duration (hours):</strong> <span id="mDuration">—</span></p>
                     <p><strong>Charge:</strong> ₹ <span id="mCharge">—</span></p>
+                    <div id="mRefundRow" style="display:none;" class="alert alert-success py-2 mb-2">
+                        <strong>Booking #<span id="mBookingId">—</span></strong> completed.
+                        Deposit of ₹ <span id="mDepositAmt">—</span> — <span id="mRefundStatus">—</span>.
+                    </div>
                     <div id="mError" class="text-danger"></div>
                 </div>
                 <div class="modal-footer">
@@ -134,6 +138,10 @@ if (!isset($_SESSION['admin_logged_in'])) {
             const mSlot = document.getElementById('mSlot');
             const mDuration = document.getElementById('mDuration');
             const mCharge = document.getElementById('mCharge');
+            const mRefundRow = document.getElementById('mRefundRow');
+            const mBookingId = document.getElementById('mBookingId');
+            const mDepositAmt = document.getElementById('mDepositAmt');
+            const mRefundStatus = document.getElementById('mRefundStatus');
             const mReceiptLink = document.getElementById('mReceiptLink');
             const mError = document.getElementById('mError');
 
@@ -238,6 +246,14 @@ if (!isset($_SESSION['admin_logged_in'])) {
                         mSlot.textContent = json.slot ?? '—';
                         mDuration.textContent = json.duration_hours ?? '—';
                         mCharge.textContent = json.charge ?? '—';
+                        if (json.booking_id) {
+                            mBookingId.textContent = json.booking_id;
+                            mDepositAmt.textContent = json.booking_amount ?? '—';
+                            mRefundStatus.textContent = json.refund_status === 'REFUNDED' ? 'Refund Issued' : json.refund_status;
+                            mRefundRow.style.display = 'block';
+                        } else {
+                            mRefundRow.style.display = 'none';
+                        }
                         if (json.receipt_path) {
                             mReceiptLink.href = json.receipt_path;
                             mReceiptLink.style.display = 'inline-block';
@@ -272,6 +288,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
                 typeText.textContent = '—';
                 matchMsg.textContent = '';
                 errorMsg.textContent = '';
+                mRefundRow.style.display = 'none';
             });
 
         })();

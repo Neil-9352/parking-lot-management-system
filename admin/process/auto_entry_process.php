@@ -98,10 +98,27 @@ try {
     $check_stmt->close();
 
 
+    // =====================
+    // 2.5⃣ Mark expired bookings as NO_SHOW
+    // If the grace window (expected_start_time + 15 min) has already passed
+    // and the vehicle never arrived, cancel the deposit refund.
+    // =====================
+    $no_show_stmt = $conn->prepare("
+        UPDATE books
+        SET booking_status = 'NO_SHOW', refund_status = 'NOT_APPLICABLE'
+        WHERE registration_number = ?
+        AND booking_status = 'ACTIVE'
+        AND DATE_ADD(expected_start_time, INTERVAL 15 MINUTE) < NOW()
+    ");
+    $no_show_stmt->bind_param("s", $plate);
+    $no_show_stmt->execute();
+    $no_show_stmt->close();
+
+
     $conn->begin_transaction();
 
     // =====================
-    // 3️⃣ Insert vehicle
+    // 3⃣ Insert vehicle
     // =====================
     $stmt = $conn->prepare("
         INSERT IGNORE INTO vehicle (registration_number, type) 
@@ -113,27 +130,70 @@ try {
 
 
     // =====================
-    // 4️⃣ Get slot FROM THIS LOT ONLY
+    // 4⃣ Check for an active booking within ±15 mins of expected_start_time
+    // If found, assign the pre-booked slot. Otherwise fall back to walk-in.
     // =====================
-    $slot_stmt = $conn->prepare("
-        SELECT slot_id, slot_no 
-        FROM parking_slot 
-        WHERE lot_id = ?
-        AND status = 'unoccupied'
-        ORDER BY slot_no
+    $booking_id = null;
+    $slot_id    = null;
+    $slot_no    = null;
+    $entry_type = 'walk-in';
+
+    $book_stmt = $conn->prepare("
+        SELECT b.booking_id, b.slot_id, ps.slot_no
+        FROM books b
+        JOIN parking_slot ps ON b.slot_id = ps.slot_id
+        WHERE b.registration_number = ?
+        AND b.booking_status = 'ACTIVE'
+        AND NOW() BETWEEN DATE_SUB(b.expected_start_time, INTERVAL 15 MINUTE)
+                      AND DATE_ADD(b.expected_start_time, INTERVAL 15 MINUTE)
+        AND ps.lot_id = ?
+        ORDER BY b.expected_start_time ASC
         LIMIT 1
         FOR UPDATE
     ");
-    $slot_stmt->bind_param("i", $lot_id);
-    $slot_stmt->execute();
-    $slot_stmt->bind_result($slot_id, $slot_no);
+    $book_stmt->bind_param("si", $plate, $lot_id);
+    $book_stmt->execute();
+    $book_stmt->bind_result($booking_id, $slot_id, $slot_no);
+    $has_booking = $book_stmt->fetch();
+    $book_stmt->close();
 
-    if (!$slot_stmt->fetch()) {
+    if ($has_booking) {
+        // Use the pre-booked slot; trust the registered vehicle type if available
+        $entry_type = 'booked';
+        $vt_stmt = $conn->prepare("
+            SELECT type FROM vehicle WHERE registration_number = ? LIMIT 1
+        ");
+        $vt_stmt->bind_param("s", $plate);
+        $vt_stmt->execute();
+        $vt_stmt->bind_result($registered_type);
+        if ($vt_stmt->fetch() && !empty($registered_type)) {
+            $vehicle_type = $registered_type;
+        }
+        $vt_stmt->close();
+    } else {
+        // =====================
+        // 4b⃣ Normal walk-in: find any free slot in this lot
+        // =====================
+        $slot_stmt = $conn->prepare("
+            SELECT slot_id, slot_no 
+            FROM parking_slot 
+            WHERE lot_id = ?
+            AND status = 'unoccupied'
+            ORDER BY slot_no
+            LIMIT 1
+            FOR UPDATE
+        ");
+        $slot_stmt->bind_param("i", $lot_id);
+        $slot_stmt->execute();
+        $slot_stmt->bind_result($slot_id, $slot_no);
+
+        if (!$slot_stmt->fetch()) {
+            $slot_stmt->close();
+            $conn->rollback();
+            respond(['error' => 'No available slots in this lot'], 409);
+        }
         $slot_stmt->close();
-        $conn->rollback();
-        respond(['error' => 'No available slots in this lot'], 409);
     }
-    $slot_stmt->close();
 
 
     // =====================
@@ -164,7 +224,7 @@ try {
     $insert_stmt = $conn->prepare("
         INSERT INTO parks_in 
         (registration_number, slot_id, lot_id, in_time, fee_id) 
-        VALUES (?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?)
     ");
     $insert_stmt->bind_param("siisi", $plate, $slot_id, $lot_id, $in_time, $fee_id);
     $insert_stmt->execute();
@@ -187,12 +247,17 @@ try {
 
     $conn->commit();
 
-    respond([
-        'plate' => $plate,
-        'type'  => $vehicle_type,
-        'slot'  => $slot_no,
-        'lot'   => $lot_id
-    ], 200);
+    $response = [
+        'plate'      => $plate,
+        'type'       => $vehicle_type,
+        'slot'       => $slot_no,
+        'lot'        => $lot_id,
+        'entry_type' => $entry_type
+    ];
+    if ($booking_id !== null) {
+        $response['booking_id'] = $booking_id;
+    }
+    respond($response, 200);
 
 } catch (Exception $e) {
 

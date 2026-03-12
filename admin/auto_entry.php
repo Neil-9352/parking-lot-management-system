@@ -88,6 +88,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
                     <p><strong>Plate:</strong> <span id="mPlate">—</span></p>
                     <p><strong>Type:</strong> <span id="mType">—</span></p>
                     <p><strong>Assigned Slot:</strong> <span id="mSlot">—</span></p>
+                    <p id="mBookingRow" style="display:none;"><strong>Booking:</strong> <span id="mBookingBadge" class="badge bg-success"></span></p>
                     <div id="mError" class="text-danger"></div>                    
                     <div id="mSuccess" class="text-success"></div>                    
                 </div>
@@ -115,6 +116,8 @@ if (!isset($_SESSION['admin_logged_in'])) {
             const mPlate = document.getElementById('mPlate');
             const mType = document.getElementById('mType');
             const mSlot = document.getElementById('mSlot');
+            const mBookingRow = document.getElementById('mBookingRow');
+            const mBookingBadge = document.getElementById('mBookingBadge');
             const mError = document.getElementById('mError');
             const mSuccess = document.getElementById('mSuccess');
             const modalCloseBtn = document.getElementById('modalCloseBtn');
@@ -178,6 +181,8 @@ if (!isset($_SESSION['admin_logged_in'])) {
                 mPlate.textContent = '—';
                 mType.textContent = '—';
                 mSlot.textContent = '—';
+                mBookingRow.style.display = 'none';
+                mBookingBadge.textContent = '';
                 mError.textContent = '';
             });
 
@@ -212,8 +217,15 @@ if (!isset($_SESSION['admin_logged_in'])) {
                         return;
                     }
 
-                    // success: expect { plate, type, slot }
-                    mSuccess.textContent = 'Vehicle parked successfully.';
+                    // success: expect { plate, type, slot, entry_type, booking_id? }
+                    if (json.entry_type === 'booked') {
+                        mSuccess.textContent = 'Pre-booked slot assigned.';
+                        mBookingBadge.textContent = 'Booking #' + json.booking_id + ' — Deposit held';
+                        mBookingRow.style.display = 'block';
+                    } else {
+                        mSuccess.textContent = 'Vehicle parked successfully.';
+                        mBookingRow.style.display = 'none';
+                    }
                     mPlate.textContent = json.plate ?? '—';
                     mType.textContent = json.type ?? '—';
                     mSlot.textContent = json.slot ?? '—';

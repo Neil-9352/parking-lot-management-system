@@ -14,7 +14,9 @@ if (!isset($_SESSION['lot_id'])) {
 
 $lot_id = intval($_SESSION['lot_id']);
 
-// Fetch slots only for selected lot
+// Fetch slots only for selected lot.
+// Booking status is derived from the books table (ACTIVE bookings),
+// not from parking_slot.status which only tracks physical occupancy.
 $stmt = $conn->prepare("
     SELECT 
         ps.slot_id,
@@ -22,13 +24,30 @@ $stmt = $conn->prepare("
         ps.status,
         v.registration_number,
         v.type,
-        pi.in_time
+        pi.in_time,
+        b.booking_id,
+        b.registration_number  AS booked_reg,
+        b.expected_start_time,
+        b.expected_end_time
     FROM parking_slot ps
     LEFT JOIN parks_in pi 
         ON ps.slot_id = pi.slot_id 
         AND pi.out_time IS NULL
     LEFT JOIN vehicle v 
         ON pi.registration_number = v.registration_number
+    LEFT JOIN books b
+        ON  b.slot_id        = ps.slot_id
+        AND b.booking_status = 'ACTIVE'
+        AND b.expected_end_time > NOW()
+        AND b.booking_id = (
+            SELECT b2.booking_id
+            FROM   books b2
+            WHERE  b2.slot_id        = ps.slot_id
+            AND    b2.booking_status = 'ACTIVE'
+            AND    b2.expected_end_time > NOW()
+            ORDER  BY b2.expected_start_time ASC, b2.booking_id ASC
+            LIMIT  1
+        )
     WHERE ps.lot_id = ?
     ORDER BY ps.slot_no
 ");
@@ -71,26 +90,31 @@ $result = $stmt->get_result();
                                     <?php while ($row = $result->fetch_assoc()): ?>
 
                                         <?php
-                                        $status = $row['status'];
-
-                                        if ($status === 'occupied') {
-                                            $cardClass = 'border-danger bg-danger-subtle';
-                                            $statusText = 'Occupied';
-                                        } elseif ($status === 'booked') {
-                                            $cardClass = 'border-warning bg-warning-subtle';
-                                            $statusText = 'Booked';
+                                        // Derive effective display status:
+                                        // 'occupied'  — vehicle physically present (parks_in)
+                                        // 'booked'    — no vehicle yet but ACTIVE booking in books table
+                                        // 'unoccupied'— fully free
+                                        if ($row['status'] === 'occupied') {
+                                            $displayStatus = 'occupied';
+                                        } elseif ($row['booking_id'] !== null) {
+                                            $displayStatus = 'booked';
                                         } else {
-                                            $cardClass = 'border-success bg-success-subtle';
-                                            $statusText = 'Unoccupied';
+                                            $displayStatus = 'unoccupied';
                                         }
 
-                                        if ($status === 'occupied') {
+                                        if ($displayStatus === 'occupied') {
+                                            $cardClass  = 'border-danger bg-danger-subtle';
+                                            $statusText = 'Occupied';
                                             $icon = ($row['type'] === '2-wheeler')
                                                 ? '../assets/motorcycle.png'
                                                 : '../assets/car.png';
-                                        } elseif ($status === 'booked') {
+                                        } elseif ($displayStatus === 'booked') {
+                                            $cardClass  = 'border-warning bg-warning-subtle';
+                                            $statusText = 'Booked';
                                             $icon = '../assets/reserved.png';
                                         } else {
+                                            $cardClass  = 'border-success bg-success-subtle';
+                                            $statusText = 'Unoccupied';
                                             $icon = '../assets/not-available-circle.png';
                                         }
                                         ?>
@@ -111,7 +135,7 @@ $result = $stmt->get_result();
 
                                                     <p class="fw-bold"><?= $statusText ?></p>
 
-                                                    <?php if ($status === 'occupied'): ?>
+                                                    <?php if ($displayStatus === 'occupied'): ?>
 
                                                         <p class="mb-1">
                                                             <strong>Reg:</strong><br>
@@ -132,10 +156,19 @@ $result = $stmt->get_result();
                                                             </button>
                                                         </form>
 
-                                                    <?php elseif ($status === 'booked'): ?>
+                                                    <?php elseif ($displayStatus === 'booked'): ?>
 
-                                                        <p class="text-warning mt-3">
-                                                            Reserved Slot
+                                                        <p class="mb-1">
+                                                            <strong>Booked by:</strong><br>
+                                                            <?= htmlspecialchars($row['booked_reg']) ?>
+                                                        </p>
+                                                        <p class="mb-1">
+                                                            <strong>From:</strong><br>
+                                                            <?= htmlspecialchars($row['expected_start_time']) ?>
+                                                        </p>
+                                                        <p class="mb-0">
+                                                            <strong>Until:</strong><br>
+                                                            <?= htmlspecialchars($row['expected_end_time']) ?>
                                                         </p>
 
                                                     <?php else: ?>

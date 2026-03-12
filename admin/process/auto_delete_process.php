@@ -164,6 +164,43 @@ try {
     $upd_slot->execute();
     $upd_slot->close();
 
+
+    // =====================
+    // 7.5⃣ Complete booking and issue refund if applicable
+    // Find any ACTIVE booking for this vehicle on this slot and mark it done.
+    // =====================
+    $booking_id     = null;
+    $booking_amount = null;
+    $refund_status  = null;
+
+    $bk_stmt = $conn->prepare("
+        SELECT booking_id, booking_amount
+        FROM books
+        WHERE registration_number = ?
+        AND slot_id = ?
+        AND booking_status = 'ACTIVE'
+        LIMIT 1
+        FOR UPDATE
+    ");
+    $bk_stmt->bind_param("si", $plate, $slot_id);
+    $bk_stmt->execute();
+    $bk_stmt->bind_result($booking_id, $booking_amount);
+    $has_booking = $bk_stmt->fetch();
+    $bk_stmt->close();
+
+    if ($has_booking) {
+        $upd_bk = $conn->prepare("
+            UPDATE books
+            SET booking_status = 'COMPLETED', refund_status = 'REFUNDED'
+            WHERE booking_id = ?
+        ");
+        $upd_bk->bind_param("i", $booking_id);
+        $upd_bk->execute();
+        $upd_bk->close();
+        $refund_status = 'REFUNDED';
+    }
+
+
     // =====================
     // 8️⃣ Generate receipt
     // =====================
@@ -185,7 +222,14 @@ try {
     $pdf->Cell(0, 8, "In Time: {$in_time}", 0, 1);
     $pdf->Cell(0, 8, "Out Time: {$out_time}", 0, 1);
     $pdf->Cell(0, 8, "Hours: {$hours_parked}", 0, 1);
-    $pdf->Cell(0, 8, "Total Fee: ₹ " . number_format($parking_fee, 2), 0, 1);
+    $pdf->Cell(0, 8, "Total Fee: \xe2\x82\xb9 " . number_format($parking_fee, 2), 0, 1);
+    if ($booking_id !== null) {
+        $pdf->Ln(3);
+        $pdf->Cell(0, 8, "--- Booking Details ---", 0, 1, 'C');
+        $pdf->Cell(0, 8, "Booking ID: #{$booking_id}", 0, 1);
+        $pdf->Cell(0, 8, "Deposit Paid: \xe2\x82\xb9 " . number_format($booking_amount, 2), 0, 1);
+        $pdf->Cell(0, 8, "Deposit Refund: {$refund_status}", 0, 1);
+    }
     $pdf->Output($file_path, "F");
 
     $receipt_db_path = "receipts/" . $file_name;
@@ -201,15 +245,21 @@ try {
 
     $conn->commit();
 
-    respond([
-        'status' => 'removed',
-        'type' => $vehicle_type,
-        'plate' => $plate,
-        'slot' => $slot_no,
+    $response = [
+        'status'         => 'removed',
+        'type'           => $vehicle_type,
+        'plate'          => $plate,
+        'slot'           => $slot_no,
         'duration_hours' => (int)$hours_parked,
-        'charge' => (float)$parking_fee,
-        'receipt_path' => $receipt_db_path
-    ], 200);
+        'charge'         => (float)$parking_fee,
+        'receipt_path'   => $receipt_db_path
+    ];
+    if ($booking_id !== null) {
+        $response['booking_id']     = $booking_id;
+        $response['booking_amount'] = (float)$booking_amount;
+        $response['refund_status']  = $refund_status;
+    }
+    respond($response, 200);
 
 } catch (Exception $e) {
     $conn->rollback();
