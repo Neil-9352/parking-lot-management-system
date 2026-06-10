@@ -5,6 +5,9 @@ if (!isset($_SESSION['admin_logged_in'])) {
     exit;
 }
 
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
 // Redirect to backend to fetch data if not set
 if (!isset($_SESSION['admin_data'])) {
     header("Location: ./process/settings_page_process.php?fetch_only=1");
@@ -15,6 +18,9 @@ if (!isset($_SESSION['admin_data'])) {
 $admin_data = $_SESSION['admin_data'];
 $current_slot_count = $admin_data['slot_count'];
 $fee_data = $admin_data['fees'];
+$current_lot_name   = $admin_data['lot_name'] ?? '';
+$current_address    = $admin_data['address'] ?? '';
+$current_layout     = $admin_data['layout_image'] ?? '';
 
 // Flash messages
 $password_success = $_SESSION['flash']['password_success'] ?? NULL;
@@ -22,6 +28,8 @@ $password_error   = $_SESSION['flash']['password_error'] ?? NULL;
 $slot_success     = $_SESSION['flash']['slot_success'] ?? NULL;
 $slot_error       = $_SESSION['flash']['slot_error'] ?? NULL;
 $fee_success      = $_SESSION['flash']['fee_success'] ?? NULL;
+$lot_success      = $_SESSION['flash']['lot_success'] ?? NULL;
+$lot_error        = $_SESSION['flash']['lot_error'] ?? NULL;
 
 // Clear flash and admin_data (optional, keep for next reload)
 unset($_SESSION['flash'], $_SESSION['admin_data']);
@@ -48,6 +56,47 @@ unset($_SESSION['flash'], $_SESSION['admin_data']);
                     <h4 class="mb-0">Admin Settings</h4>
                 </div>
                 <div class="card-body">
+
+                    <!-- Parking Lot Details -->
+                    <section class="mb-5">
+                        <h3>Parking Lot Details</h3>
+                        <?php if (isset($lot_success)) echo "<div class='alert alert-success'>$lot_success</div>"; ?>
+                        <?php if (isset($lot_error)) echo "<div class='alert alert-danger'>$lot_error</div>"; ?>
+
+                        <?php if (!empty($current_layout)): ?>
+                            <div class="mb-3">
+                                <label class="form-label">Current Layout Image</label><br>
+                                <img src="<?= htmlspecialchars($current_layout) ?>"
+                                     alt="Lot Layout"
+                                     class="img-thumbnail"
+                                     style="max-height: 200px; max-width: 100%;">
+                            </div>
+                        <?php else: ?>
+                            <p class="text-muted fst-italic mb-3">No layout image uploaded yet.</p>
+                        <?php endif; ?>
+
+                        <form method="POST" action="./process/settings_page_process.php"
+                              enctype="multipart/form-data" class="needs-validation" novalidate>
+                            <div class="mb-3">
+                                <label for="lot_name" class="form-label">Lot Name</label>
+                                <input type="text" class="form-control" id="lot_name" name="lot_name"
+                                       value="<?= htmlspecialchars($current_lot_name) ?>" required maxlength="100">
+                            </div>
+                            <div class="mb-3">
+                                <label for="lot_address" class="form-label">Address</label>
+                                <input type="text" class="form-control" id="lot_address" name="address"
+                                       value="<?= htmlspecialchars($current_address) ?>" required maxlength="255">
+                            </div>
+                            <div class="mb-3">
+                                <label for="layout_image" class="form-label">Upload New Layout Image <span class="text-muted">(optional)</span></label>
+                                <input type="file" class="form-control" id="layout_image" name="layout_image" accept="image/*">
+                                <div class="form-text">Replaces the current image if provided (PNG, JPG, WebP).</div>
+                            </div>
+                            <button type="submit" name="update_lot_details" class="btn btn-primary">Update Lot Details</button>
+                        </form>
+                    </section>
+
+                    <hr />
 
                     <!-- Password Change -->
                     <section class="mb-5">

@@ -1,15 +1,9 @@
 <?php
-// auto_entry_process.php
-// Receives image_base64 (JSON) from auto_entry.php, calls recognition API on localhost:8000,
-// then inserts vehicle into DB and returns assigned slot as JSON.
-
 session_start();
 header('Content-Type: application/json');
 
-require_once '../../config/db.php'; // adjust path if your project structure differs
-// $conn is expected to be a mysqli connection from db.php
+require_once '../../config/db.php';
 
-// Helper: send JSON response and exit
 function respond($data, $http_status = 200)
 {
     http_response_code($http_status);
@@ -17,100 +11,58 @@ function respond($data, $http_status = 200)
     exit;
 }
 
-// Read input — prefer JSON body
+// 🔐 Validate session + lot
+if (!isset($_SESSION['admin_logged_in']) || !isset($_SESSION['lot_id'])) {
+    respond(['error' => 'Unauthorized access'], 401);
+}
+
+$lot_id = intval($_SESSION['lot_id']);
+
+// Read JSON input
 $raw = file_get_contents('php://input');
 $input = json_decode($raw, true);
 
-// If not JSON, attempt to read from $_POST (form submit fallback)
-if (!$input) {
-    if (!empty($_POST['image_base64'])) {
-        $input = ['image_base64' => $_POST['image_base64']];
-    } else {
-        respond(['error' => 'Invalid request payload'], 400);
-    }
-}
-
-// Validate input
-if (empty($input['image_base64'])) {
+if (!$input || empty($input['image_base64'])) {
     respond(['error' => 'No image provided'], 400);
 }
 
 $image_base64 = $input['image_base64'];
 
-// Optional: if frontend already sent reg_number & vehicle_type (when frontend calls recognizer itself),
-// accept and skip calling recognizer. But per your request we'll call the recognition API server-side.
-// If you want to support the other flow, you can provide reg_number/vehicle_type in the request and
-// set $skip_recognizer = true.
-$skip_recognizer = false;
-$reg_number_override = null;
-$vehicle_type_override = null;
-if (!empty($input['reg_number']) && !empty($input['vehicle_type'])) {
-    // If you want always to run recognizer, comment out this block.
-    $skip_recognizer = false; // keep false to always call recognizer
-    // If you want to use frontend-recognized values, set to true and uncomment:
-    // $skip_recognizer = true;
-    // $reg_number_override = strtoupper(trim($input['reg_number']));
-    // $vehicle_type_override = $input['vehicle_type'];
+
+// =====================
+// 1️⃣ Recognition Call
+// =====================
+
+$rec_url = 'https://localhost:8000/api/detect';
+$payload = json_encode(['image_base64' => $image_base64]);
+
+$ch = curl_init($rec_url);
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_POST => true,
+    CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+    CURLOPT_POSTFIELDS => $payload,
+    CURLOPT_TIMEOUT => 20,
+    CURLOPT_SSL_VERIFYPEER => false,
+    CURLOPT_SSL_VERIFYHOST => false
+]);
+
+$rec_resp = curl_exec($ch);
+$rec_http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$curl_err = curl_error($ch);
+curl_close($ch);
+
+if ($rec_resp === false) {
+    respond(['error' => 'Recognition error: ' . $curl_err], 502);
 }
 
-$plate = null;
-$vehicle_type = null;
-
-// 1) Call recognition API unless skipped
-if (!$skip_recognizer) {
-    $rec_url = 'https://localhost:8000/api/detect'; // your FastAPI endpoint
-    $payload = json_encode(['image_base64' => $image_base64]);
-
-    $ch = curl_init($rec_url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 20);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-
-    $rec_resp = curl_exec($ch);
-    $rec_http = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $curl_err = curl_error($ch);
-    curl_close($ch);
-
-    if ($rec_resp === false) {
-        respond(['error' => 'Recognition service error: ' . $curl_err], 502);
-    }
-
-    $rec_json = json_decode($rec_resp, true);
-    if ($rec_json === null) {
-        // If recognition server returned non-JSON, return raw message (but truncated)
-        respond(['error' => 'Bad response from recognition service', 'raw' => substr($rec_resp, 0, 1000)], 502);
-    }
-
-    // Propagate semantic errors from recognition API:
-    if ($rec_http === 422) {
-        // e.g., {"error":"No valid plate detected"} — pass through
-        respond(['error' => $rec_json['error'] ?? 'No valid plate/vehicle detected'], 422);
-    }
-
-    if ($rec_http === 400) {
-        respond(['error' => $rec_json['error'] ?? 'Bad image input'], 400);
-    }
-
-    if ($rec_http !== 200) {
-        respond(['error' => 'Recognition service returned HTTP ' . $rec_http, 'details' => $rec_json], 502);
-    }
-
-    // success: expect {"plate":"MH12AB1234", "type":"car"}
-    if (empty($rec_json['plate']) || empty($rec_json['type'])) {
-        respond(['error' => 'Recognition returned incomplete data'], 502);
-    }
-
-    $plate = strtoupper(trim($rec_json['plate']));
-    $vehicle_type = trim($rec_json['type']);
-} else {
-    // Use overrides
-    $plate = $reg_number_override;
-    $vehicle_type = $vehicle_type_override;
+$rec_json = json_decode($rec_resp, true);
+if ($rec_http !== 200 || empty($rec_json['plate']) || empty($rec_json['type'])) {
+    respond(['error' => 'Recognition failed'], 422);
 }
+
+$plate = strtoupper(trim($rec_json['plate']));
+$vehicle_type_raw = strtolower(trim($rec_json['type']));
 
 $type_map = [
     'car' => '4-wheeler',
@@ -121,99 +73,283 @@ $type_map = [
     '2-wheeler' => '2-wheeler'
 ];
 
-$vehicle_type_mapped = $type_map[strtolower($vehicle_type)] ?? $vehicle_type; // fallback to raw if unknown
-
+$vehicle_type = $type_map[$vehicle_type_raw] ?? '4-wheeler';
 $in_time = date("Y-m-d H:i:s");
 
+
 try {
-    // 1) Check if vehicle already parked
-    $check_stmt = $conn->prepare("SELECT 1 FROM parks_in WHERE registration_number = ? AND out_time IS NULL");
-    if (!$check_stmt) throw new Exception("DB prepare failed: " . $conn->error);
+
+    // =====================
+    // 2️⃣ Already Parked?
+    // =====================
+    $check_stmt = $conn->prepare("
+        SELECT 1 
+        FROM parks_in 
+        WHERE registration_number = ? 
+        AND out_time IS NULL
+    ");
     $check_stmt->bind_param("s", $plate);
     $check_stmt->execute();
     $check_stmt->store_result();
+
     if ($check_stmt->num_rows > 0) {
-        $check_stmt->close();
-        respond(['error' => 'Vehicle is already parked'], 409);
+        respond(['error' => 'Vehicle already parked'], 409);
     }
     $check_stmt->close();
 
-    // Start transaction
+
+    // =====================
+    // 2.5⃣ Mark expired bookings as NO_SHOW
+    // If the grace window (expected_start_time + 15 min) has already passed
+    // and the vehicle never arrived, cancel the deposit refund.
+    // =====================
+    $no_show_stmt = $conn->prepare("
+        UPDATE books
+        SET booking_status = 'NO_SHOW', refund_status = 'NOT_APPLICABLE'
+        WHERE registration_number = ?
+        AND booking_status = 'ACTIVE'
+        AND DATE_ADD(expected_start_time, INTERVAL 15 MINUTE) < NOW()
+    ");
+    $no_show_stmt->bind_param("s", $plate);
+    $no_show_stmt->execute();
+    $no_show_stmt->close();
+
+
     $conn->begin_transaction();
 
-    // Insert vehicle if not exists
-    $insert_vehicle = "INSERT IGNORE INTO vehicle (registration_number, vehicle_type) VALUES (?, ?)";
-    $stmt = $conn->prepare($insert_vehicle);
-    if (!$stmt) throw new Exception("DB prepare failed (insert vehicle): " . $conn->error);
-    $stmt->bind_param("ss", $plate, $vehicle_type_mapped);
-    if (!$stmt->execute()) throw new Exception("Failed to insert vehicle: " . $stmt->error);
+    // =====================
+    // 3⃣ Insert vehicle
+    // =====================
+    $stmt = $conn->prepare("
+        INSERT IGNORE INTO vehicle (registration_number, type) 
+        VALUES (?, ?)
+    ");
+    $stmt->bind_param("ss", $plate, $vehicle_type);
+    $stmt->execute();
     $stmt->close();
 
-    // Select an available slot (lock it with FOR UPDATE)
-    $slot_query = "SELECT slot_id, slot_number FROM parking_slot WHERE status = 'unoccupied' ORDER BY slot_number LIMIT 1 FOR UPDATE";
-    $res = $conn->query($slot_query);
-    if (!$res) throw new Exception("Failed selecting slot: " . $conn->error);
 
-    if ($res->num_rows === 0) {
-        $conn->rollback();
-        respond(['error' => 'No available parking slots'], 409);
+    // =====================
+    // 4⃣ Check for an active booking within ±15 mins of expected_start_time
+    // If found, assign the pre-booked slot. Otherwise fall back to walk-in.
+    // =====================
+    $booking_id = null;
+    $slot_id    = null;
+    $slot_no    = null;
+    $entry_type = 'walk-in';
+    $early_walkin        = false;
+    $cancelled_booking_id = null;
+    $refund_amount        = null;
+
+    $book_stmt = $conn->prepare("
+        SELECT b.booking_id, b.slot_id, ps.slot_no
+        FROM books b
+        JOIN parking_slot ps ON b.slot_id = ps.slot_id
+        WHERE b.registration_number = ?
+        AND b.booking_status = 'ACTIVE'
+        AND NOW() BETWEEN DATE_SUB(b.expected_start_time, INTERVAL 15 MINUTE)
+                      AND DATE_ADD(b.expected_start_time, INTERVAL 15 MINUTE)
+        AND ps.lot_id = ?
+        ORDER BY b.expected_start_time ASC
+        LIMIT 1
+        FOR UPDATE
+    ");
+    $book_stmt->bind_param("si", $plate, $lot_id);
+    $book_stmt->execute();
+    $book_stmt->bind_result($booking_id, $slot_id, $slot_no);
+    $has_booking = $book_stmt->fetch();
+    $book_stmt->close();
+
+    if ($has_booking) {
+        // Use the pre-booked slot; trust the registered vehicle type if available
+        $entry_type = 'booked';
+        $vt_stmt = $conn->prepare("
+            SELECT type FROM vehicle WHERE registration_number = ? LIMIT 1
+        ");
+        $vt_stmt->bind_param("s", $plate);
+        $vt_stmt->execute();
+        $vt_stmt->bind_result($registered_type);
+        if ($vt_stmt->fetch() && !empty($registered_type)) {
+            $vehicle_type = $registered_type;
+        }
+        $vt_stmt->close();
+    } else {
+        // =====================
+        // 4a⃣ Early arrival? Check for an upcoming booking >15 min away.
+        // If found, cancel it with 90% refund (10% penalty) and treat as walk-in.
+        // =====================
+        $early_stmt = $conn->prepare("
+            SELECT b.booking_id, b.booking_amount
+            FROM books b
+            JOIN parking_slot ps ON b.slot_id = ps.slot_id
+            WHERE b.registration_number = ?
+            AND b.booking_status = 'ACTIVE'
+            AND NOW() < DATE_SUB(b.expected_start_time, INTERVAL 15 MINUTE)
+            AND ps.lot_id = ?
+            ORDER BY b.expected_start_time ASC
+            LIMIT 1
+            FOR UPDATE
+        ");
+        $early_stmt->bind_param("si", $plate, $lot_id);
+        $early_stmt->execute();
+        $early_stmt->bind_result($cancelled_booking_id, $original_amount);
+        $has_early_booking = $early_stmt->fetch();
+        $early_stmt->close();
+
+        if ($has_early_booking) {
+            // Cancel booking with 90% refund
+            $refund_amount = round($original_amount * 0.90, 2);
+            $cancel_stmt = $conn->prepare("
+                UPDATE books
+                SET booking_status = 'CANCELLED', refund_status = 'REFUNDED'
+                WHERE booking_id = ?
+            ");
+            $cancel_stmt->bind_param("i", $cancelled_booking_id);
+            $cancel_stmt->execute();
+            $cancel_stmt->close();
+            $early_walkin = true;
+        }
+
+        // =====================
+        // 4b⃣ Walk-in slot selection — priority order:
+        //   1st: status = 'unoccupied'  (truly free)
+        //   2nd: status = 'booked' where booking starts > 3 hours from now
+        // =====================
+
+        // --- Phase 1: prefer unoccupied ---
+        $slot_stmt = $conn->prepare("
+            SELECT slot_id, slot_no
+            FROM parking_slot
+            WHERE lot_id = ?
+            AND status = 'unoccupied'
+            ORDER BY RAND()
+            LIMIT 1
+            FOR UPDATE
+        ");
+        $slot_stmt->bind_param("i", $lot_id);
+        $slot_stmt->execute();
+        $slot_stmt->bind_result($slot_id, $slot_no);
+        $found_slot = $slot_stmt->fetch();
+        $slot_stmt->close();
+
+        // --- Phase 2: fallback — booked slot with >3h until booking start ---
+        $displaced_booking_id     = null;
+        $displaced_booking_amount = null;
+
+        if (!$found_slot) {
+            $fallback_stmt = $conn->prepare("
+                SELECT ps.slot_id, ps.slot_no, b.booking_id, b.booking_amount
+                FROM parking_slot ps
+                JOIN books b ON b.slot_id = ps.slot_id
+                WHERE ps.lot_id = ?
+                AND ps.status = 'booked'
+                AND b.booking_status = 'ACTIVE'
+                AND b.expected_start_time > DATE_ADD(NOW(), INTERVAL 3 HOUR)
+                ORDER BY b.expected_start_time DESC
+                LIMIT 1
+                FOR UPDATE
+            ");
+            $fallback_stmt->bind_param("i", $lot_id);
+            $fallback_stmt->execute();
+            $fallback_stmt->bind_result($slot_id, $slot_no,
+                                         $displaced_booking_id, $displaced_booking_amount);
+            $found_slot = $fallback_stmt->fetch();
+            $fallback_stmt->close();
+
+            if ($found_slot) {
+                // Cancel the displaced booking (full refund — 3+ hours notice)
+                $disp_cancel = $conn->prepare("
+                    UPDATE books
+                    SET booking_status = 'CANCELLED', refund_status = 'REFUNDED'
+                    WHERE booking_id = ?
+                ");
+                $disp_cancel->bind_param("i", $displaced_booking_id);
+                $disp_cancel->execute();
+                $disp_cancel->close();
+                $entry_type = 'walkin_on_booked';
+            }
+        }
+
+        if (!$found_slot) {
+            $conn->rollback();
+            respond(['error' => 'No available slots in this lot'], 409);
+        }
     }
 
-    $slot_row = $res->fetch_assoc();
-    $slot_id = intval($slot_row['slot_id']);
-    $slot_number = intval($slot_row['slot_number']);
 
-    // Get latest fee_id for this vehicle type (matching your manual logic)
-    $fee_stmt = $conn->prepare("SELECT fee_id FROM fee WHERE vehicle_type = ? ORDER BY created_at DESC LIMIT 1");
-    if (!$fee_stmt) throw new Exception("DB prepare failed (fee): " . $conn->error);
-    $fee_stmt->bind_param("s", $vehicle_type_mapped);
+    // =====================
+    // 5️⃣ Get latest fee
+    // =====================
+    $fee_stmt = $conn->prepare("
+        SELECT fee_id 
+        FROM fee 
+        WHERE vehicle_type = ?
+        ORDER BY created_at DESC 
+        LIMIT 1
+    ");
+    $fee_stmt->bind_param("s", $vehicle_type);
     $fee_stmt->execute();
     $fee_stmt->bind_result($fee_id);
+
     if (!$fee_stmt->fetch()) {
         $fee_stmt->close();
         $conn->rollback();
-        throw new Exception("Fee configuration not found for vehicle type: " . $vehicle_type_mapped);
+        throw new Exception("Fee configuration not found");
     }
     $fee_stmt->close();
 
-    // Insert into parks_in
-    $insert_parks_in = "INSERT INTO parks_in (registration_number, slot_id, in_time, fee_id) VALUES (?, ?, ?, ?)";
-    $pstmt = $conn->prepare($insert_parks_in);
-    if (!$pstmt) throw new Exception("DB prepare failed (parks_in): " . $conn->error);
-    $pstmt->bind_param("sisi", $plate, $slot_id, $in_time, $fee_id);
-    if (!$pstmt->execute()) {
-        $pstmt->close();
-        $conn->rollback();
-        throw new Exception("Error inserting vehicle parking entry: " . $pstmt->error);
-    }
-    $pstmt->close();
 
-    // Update parking_slot status to occupied (use slot_id)
-    $update_slot = $conn->prepare("UPDATE parking_slot SET status = 'occupied' WHERE slot_id = ?");
-    if (!$update_slot) throw new Exception("DB prepare failed (update slot): " . $conn->error);
-    $update_slot->bind_param("i", $slot_id);
-    if (!$update_slot->execute()) {
-        $update_slot->close();
-        $conn->rollback();
-        throw new Exception("Failed to update slot status: " . $update_slot->error);
-    }
-    $update_slot->close();
+    // =====================
+    // 6️⃣ Insert parks_in
+    // =====================
+    $insert_stmt = $conn->prepare("
+        INSERT INTO parks_in 
+        (registration_number, slot_id, lot_id, in_time, fee_id) 
+        VALUES (?, ?, ?, ?, ?)
+    ");
+    $insert_stmt->bind_param("siisi", $plate, $slot_id, $lot_id, $in_time, $fee_id);
+    $insert_stmt->execute();
+    $insert_stmt->close();
 
-    // Commit transaction
+
+    // =====================
+    // 7️⃣ Mark slot occupied
+    // =====================
+    $update_stmt = $conn->prepare("
+        UPDATE parking_slot 
+        SET status = 'occupied'
+        WHERE slot_id = ?
+        AND lot_id = ?
+    ");
+    $update_stmt->bind_param("ii", $slot_id, $lot_id);
+    $update_stmt->execute();
+    $update_stmt->close();
+
+
     $conn->commit();
 
-    // Optionally, you may want to store the captured image on server or in DB.
-    // This script currently does NOT store the image; if you want to save it,
-    // decode $image_base64 and write to disk or to a DB blob column here.
-
-    // Return success with assigned slot and recognized items to frontend
-    respond(['plate' => $plate, 'type' => $vehicle_type_mapped, 'slot' => $slot_number], 200);
-} catch (Exception $e) {
-    // Rollback if transaction is active
-    if ($conn->connect_errno === 0) {
-        // If connection exists and autocommit is disabled due to begin_transaction
-        @$conn->rollback();
+    $response = [
+        'plate'        => $plate,
+        'type'         => $vehicle_type,
+        'slot'         => $slot_no,
+        'lot'          => $lot_id,
+        'entry_type'   => $entry_type,
+        'early_walkin' => $early_walkin,
+    ];
+    if ($booking_id !== null) {
+        $response['booking_id'] = $booking_id;
     }
-    // For security avoid exposing raw DB errors in production; here we include the message for debugging
+    if ($early_walkin) {
+        $response['cancelled_booking_id'] = $cancelled_booking_id;
+        $response['refund_amount']         = $refund_amount;
+    }
+    if ($entry_type === 'walkin_on_booked' && $displaced_booking_id !== null) {
+        $response['displaced_booking_id'] = $displaced_booking_id;
+    }
+    respond($response, 200);
+
+} catch (Exception $e) {
+
+    $conn->rollback();
     respond(['error' => 'Server error: ' . $e->getMessage()], 500);
 }

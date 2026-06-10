@@ -2,19 +2,33 @@
 session_start();
 require_once '../../config/db.php';
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $reg_number = strtoupper(trim($_POST['reg_number']));
-    $vehicle_type = $_POST['vehicle_type'];
-    $slot_number = intval($_POST['slot_number']);
-    $in_time = date("Y-m-d H:i:s");
+// Validate login + lot selection
+if (!isset($_SESSION['admin_logged_in']) || !isset($_SESSION['lot_id'])) {
+    header("Location: ../../index.php");
+    exit;
+}
 
-    // Check if vehicle is already parked
-    $check_stmt = $conn->prepare("SELECT 1 FROM parks_in WHERE registration_number = ? AND out_time IS NULL");
+$lot_id = intval($_SESSION['lot_id']);
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+
+    $reg_number   = strtoupper(trim($_POST['reg_number']));
+    $vehicle_type = $_POST['vehicle_type'];
+    $slot_no      = intval($_POST['slot_number']);
+    $in_time      = date("Y-m-d H:i:s");
+
+    // 1️⃣ Check if vehicle already parked anywhere
+    $check_stmt = $conn->prepare("
+        SELECT 1 
+        FROM parks_in 
+        WHERE registration_number = ? 
+        AND out_time IS NULL
+    ");
     $check_stmt->bind_param("s", $reg_number);
     $check_stmt->execute();
     $check_stmt->store_result();
+
     if ($check_stmt->num_rows > 0) {
-        $check_stmt->close();
         $_SESSION['toast_error'] = "Vehicle is already parked!";
         header("Location: ../add_vehicle.php");
         exit;
@@ -22,61 +36,90 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $check_stmt->close();
 
     try {
-        // Start Transaction
+
         $conn->begin_transaction();
 
-        // Insert vehicle if not exists
-        $insert_vehicle = "INSERT IGNORE INTO vehicle (registration_number, vehicle_type) VALUES (?, ?)";
-        $stmt = $conn->prepare($insert_vehicle);
+        // 2️⃣ Insert vehicle if not exists
+        $stmt = $conn->prepare("
+            INSERT IGNORE INTO vehicle (registration_number, type) 
+            VALUES (?, ?)
+        ");
         $stmt->bind_param("ss", $reg_number, $vehicle_type);
         $stmt->execute();
         $stmt->close();
 
-        // Get slot_id from slot_number
-        $stmt = $conn->prepare("SELECT slot_id FROM parking_slot WHERE slot_number = ?");
-        $stmt->bind_param("i", $slot_number);
+        // 3️⃣ Get slot_id ONLY from this lot and ensure it's unoccupied
+        $stmt = $conn->prepare("
+            SELECT slot_id 
+            FROM parking_slot 
+            WHERE slot_no = ? 
+            AND lot_id = ?
+            AND status = 'unoccupied'
+            FOR UPDATE
+        ");
+        $stmt->bind_param("ii", $slot_no, $lot_id);
         $stmt->execute();
         $stmt->bind_result($slot_id);
+
         if (!$stmt->fetch()) {
-            throw new Exception("Invalid parking slot selected.");
+            throw new Exception("Invalid or unavailable slot selected.");
         }
         $stmt->close();
 
-        // Get latest fee_id
-        $stmt = $conn->prepare("SELECT fee_id FROM fee WHERE vehicle_type = ? ORDER BY created_at DESC LIMIT 1");
+        // 4️⃣ Get latest fee configuration
+        $stmt = $conn->prepare("
+            SELECT fee_id 
+            FROM fee 
+            WHERE vehicle_type = ? 
+            ORDER BY created_at DESC 
+            LIMIT 1
+        ");
         $stmt->bind_param("s", $vehicle_type);
         $stmt->execute();
         $stmt->bind_result($fee_id);
+
         if (!$stmt->fetch()) {
             throw new Exception("Fee configuration not found.");
         }
         $stmt->close();
 
-        // Insert into parks_in
-        $stmt = $conn->prepare("INSERT INTO parks_in (registration_number, slot_id, in_time, fee_id) VALUES (?, ?, ?, ?)");
-        $stmt->bind_param("siss", $reg_number, $slot_id, $in_time, $fee_id);
+        // 5️⃣ Insert parking record
+        $stmt = $conn->prepare("
+            INSERT INTO parks_in 
+            (registration_number, slot_id, lot_id, in_time, fee_id) 
+            VALUES (?, ?, ?, ?, ?)
+        ");
+        $stmt->bind_param("siisi", $reg_number, $slot_id, $lot_id, $in_time, $fee_id);
+
         if (!$stmt->execute()) {
-            throw new Exception("Error inserting vehicle parking entry.");
+            throw new Exception("Error inserting parking entry.");
         }
         $stmt->close();
 
-        // Update parking slot status
-        $stmt = $conn->prepare("UPDATE parking_slot SET status = 'occupied' WHERE slot_number = ?");
-        $stmt->bind_param("i", $slot_number);
+        // 6️⃣ Update slot status (strictly for this lot)
+        $stmt = $conn->prepare("
+            UPDATE parking_slot 
+            SET status = 'occupied' 
+            WHERE slot_id = ? 
+            AND lot_id = ?
+        ");
+        $stmt->bind_param("ii", $slot_id, $lot_id);
+
         if (!$stmt->execute()) {
             throw new Exception("Failed to update slot status.");
         }
         $stmt->close();
 
-        // Commit Transaction
         $conn->commit();
+
         $_SESSION['toast_success'] = "Vehicle parked successfully!";
         header("Location: ../add_vehicle.php");
         exit;
 
     } catch (Exception $e) {
-        // ❌ Rollback on Error
+
         $conn->rollback();
+
         $_SESSION['toast_error'] = "Transaction failed: " . $e->getMessage();
         header("Location: ../add_vehicle.php");
         exit;
