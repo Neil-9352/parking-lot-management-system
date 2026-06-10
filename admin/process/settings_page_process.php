@@ -33,6 +33,13 @@ if (isset($_GET['fetch_only'])) {
     $res = $stmt->get_result();
     $current_slot_count = intval($res->fetch_assoc()['total']);
 
+    // Lot details
+    $stmt = $conn->prepare("SELECT lot_name, address, layout_image_path FROM parking_lot WHERE lot_id = ?");
+    $stmt->bind_param("i", $lot_id);
+    $stmt->execute();
+    $lot_row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
     // Fee data for THIS LOT
     $fee_data = [
         '2-wheeler' => ['first_hour' => 0, 'next_hour' => 0],
@@ -52,8 +59,11 @@ if (isset($_GET['fetch_only'])) {
     }
 
     $_SESSION['admin_data'] = [
-        'slot_count' => $current_slot_count,
-        'fees' => $fee_data
+        'slot_count'   => $current_slot_count,
+        'fees'         => $fee_data,
+        'lot_name'     => $lot_row['lot_name'] ?? '',
+        'address'      => $lot_row['address'] ?? '',
+        'layout_image' => $lot_row['layout_image_path'] ?? ''
     ];
 
     header("Location: ../settings_page.php");
@@ -193,6 +203,62 @@ if (isset($_POST['update_fee'])) {
 }
 
 /* =====================================================
+   UPDATE LOT DETAILS
+===================================================== */
+if (isset($_POST['update_lot_details'])) {
+
+    $lot_name = trim($_POST['lot_name'] ?? '');
+    $address  = trim($_POST['address'] ?? '');
+
+    if (empty($lot_name) || empty($address)) {
+        flash('lot_error', 'Lot name and address are required.');
+        header("Location: ../settings_page.php");
+        exit;
+    }
+
+    // Handle optional new layout image
+    $new_image_path = null;
+    if (isset($_FILES['layout_image']) && $_FILES['layout_image']['error'] === UPLOAD_ERR_OK) {
+        $allowed_types = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
+        $file_type = mime_content_type($_FILES['layout_image']['tmp_name']);
+
+        if (!in_array($file_type, $allowed_types)) {
+            flash('lot_error', 'Invalid image format. Allowed: PNG, JPG, GIF, WebP.');
+            header("Location: ../settings_page.php");
+            exit;
+        }
+
+        $ext = pathinfo($_FILES['layout_image']['name'], PATHINFO_EXTENSION);
+        $filename = "Lot_{$lot_id}_layout." . $ext;
+        $upload_dir = __DIR__ . '/../uploads/layouts/';
+        if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
+        $destination = $upload_dir . $filename;
+
+        if (move_uploaded_file($_FILES['layout_image']['tmp_name'], $destination)) {
+            $new_image_path = "admin/uploads/layouts/" . $filename;
+        } else {
+            flash('lot_error', 'Failed to upload image.');
+            header("Location: ../settings_page.php");
+            exit;
+        }
+    }
+
+    if ($new_image_path !== null) {
+        $stmt = $conn->prepare("UPDATE parking_lot SET lot_name = ?, address = ?, layout_image_path = ? WHERE lot_id = ?");
+        $stmt->bind_param("sssi", $lot_name, $address, $new_image_path, $lot_id);
+    } else {
+        $stmt = $conn->prepare("UPDATE parking_lot SET lot_name = ?, address = ? WHERE lot_id = ?");
+        $stmt->bind_param("ssi", $lot_name, $address, $lot_id);
+    }
+    $stmt->execute();
+    $stmt->close();
+
+    flash('lot_success', 'Parking lot details updated successfully.');
+    header("Location: ../settings_page.php");
+    exit;
+}
+
+/* =====================================================
    DEFAULT FETCH (Safety fallback)
 ===================================================== */
 
@@ -201,6 +267,12 @@ $stmt->bind_param("i", $lot_id);
 $stmt->execute();
 $res = $stmt->get_result();
 $current_slot_count = intval($res->fetch_assoc()['total']);
+
+$stmt = $conn->prepare("SELECT lot_name, address, layout_image_path FROM parking_lot WHERE lot_id = ?");
+$stmt->bind_param("i", $lot_id);
+$stmt->execute();
+$lot_row = $stmt->get_result()->fetch_assoc();
+$stmt->close();
 
 $fee_data = [
     '2-wheeler' => ['first_hour' => 0, 'next_hour' => 0],
@@ -220,8 +292,11 @@ while ($row = $res->fetch_assoc()) {
 }
 
 $_SESSION['admin_data'] = [
-    'slot_count' => $current_slot_count,
-    'fees' => $fee_data
+    'slot_count'   => $current_slot_count,
+    'fees'         => $fee_data,
+    'lot_name'     => $lot_row['lot_name'] ?? '',
+    'address'      => $lot_row['address'] ?? '',
+    'layout_image' => $lot_row['layout_image_path'] ?? ''
 ];
 
 header("Location: ../settings_page.php");

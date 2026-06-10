@@ -28,7 +28,8 @@ $stmt = $conn->prepare("
         b.booking_id,
         b.registration_number  AS booked_reg,
         b.expected_start_time,
-        b.expected_end_time
+        b.expected_end_time,
+        bv.type                AS booked_type
     FROM parking_slot ps
     LEFT JOIN parks_in pi 
         ON ps.slot_id = pi.slot_id 
@@ -48,6 +49,8 @@ $stmt = $conn->prepare("
             ORDER  BY b2.expected_start_time ASC, b2.booking_id ASC
             LIMIT  1
         )
+    LEFT JOIN vehicle bv
+        ON bv.registration_number = b.registration_number
     WHERE ps.lot_id = ?
     ORDER BY ps.slot_no
 ");
@@ -111,7 +114,9 @@ $result = $stmt->get_result();
                                         } elseif ($displayStatus === 'booked') {
                                             $cardClass  = 'border-warning bg-warning-subtle';
                                             $statusText = 'Booked';
-                                            $icon = '../assets/reserved.png';
+                                            $icon = ($row['booked_type'] === '2-wheeler')
+                                                ? '../assets/motorcycle.png'
+                                                : '../assets/car.png';
                                         } else {
                                             $cardClass  = 'border-success bg-success-subtle';
                                             $statusText = 'Unoccupied';

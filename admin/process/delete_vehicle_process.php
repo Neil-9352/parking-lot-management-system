@@ -94,14 +94,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['slot_id'])) {
         $stmt->execute();
         $stmt->close();
 
-        // 4️⃣ Mark slot unoccupied (restricted by lot)
+        // 4️⃣ Smart slot restoration
+        // If an ACTIVE future booking still holds this slot, restore to 'booked'.
+        // Otherwise restore to 'unoccupied'.
+        $restore_check = $conn->prepare("
+            SELECT 1
+            FROM books
+            WHERE slot_id = ?
+            AND booking_status = 'ACTIVE'
+            AND expected_end_time > NOW()
+            LIMIT 1
+        ");
+        $restore_check->bind_param("i", $slot_id);
+        $restore_check->execute();
+        $restore_check->store_result();
+        $restore_status = ($restore_check->num_rows > 0) ? 'booked' : 'unoccupied';
+        $restore_check->close();
+
         $stmt = $conn->prepare("
-            UPDATE parking_slot 
-            SET status = 'unoccupied' 
-            WHERE slot_id = ? 
+            UPDATE parking_slot
+            SET status = ?
+            WHERE slot_id = ?
             AND lot_id = ?
         ");
-        $stmt->bind_param("ii", $slot_id, $lot_id);
+        $stmt->bind_param("sii", $restore_status, $slot_id, $lot_id);
         $stmt->execute();
         $stmt->close();
 

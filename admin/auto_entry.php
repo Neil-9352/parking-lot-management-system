@@ -89,6 +89,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
                     <p><strong>Type:</strong> <span id="mType">—</span></p>
                     <p><strong>Assigned Slot:</strong> <span id="mSlot">—</span></p>
                     <p id="mBookingRow" style="display:none;"><strong>Booking:</strong> <span id="mBookingBadge" class="badge bg-success"></span></p>
+                    <div id="mEarlyWalkin" class="alert alert-warning py-2" style="display:none;"></div>
                     <div id="mError" class="text-danger"></div>                    
                     <div id="mSuccess" class="text-success"></div>                    
                 </div>
@@ -118,6 +119,7 @@ if (!isset($_SESSION['admin_logged_in'])) {
             const mSlot = document.getElementById('mSlot');
             const mBookingRow = document.getElementById('mBookingRow');
             const mBookingBadge = document.getElementById('mBookingBadge');
+            const mEarlyWalkin = document.getElementById('mEarlyWalkin');
             const mError = document.getElementById('mError');
             const mSuccess = document.getElementById('mSuccess');
             const modalCloseBtn = document.getElementById('modalCloseBtn');
@@ -183,6 +185,8 @@ if (!isset($_SESSION['admin_logged_in'])) {
                 mSlot.textContent = '—';
                 mBookingRow.style.display = 'none';
                 mBookingBadge.textContent = '';
+                mEarlyWalkin.style.display = 'none';
+                mEarlyWalkin.textContent = '';
                 mError.textContent = '';
             });
 
@@ -217,8 +221,24 @@ if (!isset($_SESSION['admin_logged_in'])) {
                         return;
                     }
 
-                    // success: expect { plate, type, slot, entry_type, booking_id? }
-                    if (json.entry_type === 'booked') {
+                    // success: expect { plate, type, slot, entry_type, booking_id?, early_walkin, cancelled_booking_id?, refund_amount?, displaced_booking_id? }
+                    mEarlyWalkin.style.display = 'none';
+                    mEarlyWalkin.textContent = '';
+                    if (json.early_walkin) {
+                        mEarlyWalkin.style.display = 'block';
+                        mEarlyWalkin.innerHTML =
+                            `⚠️ <strong>Early arrival detected.</strong> Booking #${json.cancelled_booking_id} has been cancelled. ` +
+                            `A refund of <strong>₹${json.refund_amount}</strong> (90%) will be processed. Vehicle treated as walk-in.`;
+                        mSuccess.textContent = 'Vehicle parked as walk-in (early arrival).';
+                        mBookingRow.style.display = 'none';
+                    } else if (json.entry_type === 'walkin_on_booked') {
+                        mSuccess.textContent = 'Vehicle parked as walk-in (booked slot reassigned).';
+                        mEarlyWalkin.style.display = 'block';
+                        mEarlyWalkin.innerHTML =
+                            `ℹ️ No free slots were available. Booking #${json.displaced_booking_id} was cancelled ` +
+                            `(full refund — booking is >3 hours away). Slot reassigned to this walk-in.`;
+                        mBookingRow.style.display = 'none';
+                    } else if (json.entry_type === 'booked') {
                         mSuccess.textContent = 'Pre-booked slot assigned.';
                         mBookingBadge.textContent = 'Booking #' + json.booking_id + ' — Deposit held';
                         mBookingRow.style.display = 'block';

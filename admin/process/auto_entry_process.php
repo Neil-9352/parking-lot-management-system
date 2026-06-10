@@ -137,6 +137,9 @@ try {
     $slot_id    = null;
     $slot_no    = null;
     $entry_type = 'walk-in';
+    $early_walkin        = false;
+    $cancelled_booking_id = null;
+    $refund_amount        = null;
 
     $book_stmt = $conn->prepare("
         SELECT b.booking_id, b.slot_id, ps.slot_no
@@ -172,27 +175,105 @@ try {
         $vt_stmt->close();
     } else {
         // =====================
-        // 4b⃣ Normal walk-in: find any free slot in this lot
+        // 4a⃣ Early arrival? Check for an upcoming booking >15 min away.
+        // If found, cancel it with 90% refund (10% penalty) and treat as walk-in.
         // =====================
+        $early_stmt = $conn->prepare("
+            SELECT b.booking_id, b.booking_amount
+            FROM books b
+            JOIN parking_slot ps ON b.slot_id = ps.slot_id
+            WHERE b.registration_number = ?
+            AND b.booking_status = 'ACTIVE'
+            AND NOW() < DATE_SUB(b.expected_start_time, INTERVAL 15 MINUTE)
+            AND ps.lot_id = ?
+            ORDER BY b.expected_start_time ASC
+            LIMIT 1
+            FOR UPDATE
+        ");
+        $early_stmt->bind_param("si", $plate, $lot_id);
+        $early_stmt->execute();
+        $early_stmt->bind_result($cancelled_booking_id, $original_amount);
+        $has_early_booking = $early_stmt->fetch();
+        $early_stmt->close();
+
+        if ($has_early_booking) {
+            // Cancel booking with 90% refund
+            $refund_amount = round($original_amount * 0.90, 2);
+            $cancel_stmt = $conn->prepare("
+                UPDATE books
+                SET booking_status = 'CANCELLED', refund_status = 'REFUNDED'
+                WHERE booking_id = ?
+            ");
+            $cancel_stmt->bind_param("i", $cancelled_booking_id);
+            $cancel_stmt->execute();
+            $cancel_stmt->close();
+            $early_walkin = true;
+        }
+
+        // =====================
+        // 4b⃣ Walk-in slot selection — priority order:
+        //   1st: status = 'unoccupied'  (truly free)
+        //   2nd: status = 'booked' where booking starts > 3 hours from now
+        // =====================
+
+        // --- Phase 1: prefer unoccupied ---
         $slot_stmt = $conn->prepare("
-            SELECT slot_id, slot_no 
-            FROM parking_slot 
+            SELECT slot_id, slot_no
+            FROM parking_slot
             WHERE lot_id = ?
             AND status = 'unoccupied'
-            ORDER BY slot_no
+            ORDER BY RAND()
             LIMIT 1
             FOR UPDATE
         ");
         $slot_stmt->bind_param("i", $lot_id);
         $slot_stmt->execute();
         $slot_stmt->bind_result($slot_id, $slot_no);
+        $found_slot = $slot_stmt->fetch();
+        $slot_stmt->close();
 
-        if (!$slot_stmt->fetch()) {
-            $slot_stmt->close();
+        // --- Phase 2: fallback — booked slot with >3h until booking start ---
+        $displaced_booking_id     = null;
+        $displaced_booking_amount = null;
+
+        if (!$found_slot) {
+            $fallback_stmt = $conn->prepare("
+                SELECT ps.slot_id, ps.slot_no, b.booking_id, b.booking_amount
+                FROM parking_slot ps
+                JOIN books b ON b.slot_id = ps.slot_id
+                WHERE ps.lot_id = ?
+                AND ps.status = 'booked'
+                AND b.booking_status = 'ACTIVE'
+                AND b.expected_start_time > DATE_ADD(NOW(), INTERVAL 3 HOUR)
+                ORDER BY b.expected_start_time DESC
+                LIMIT 1
+                FOR UPDATE
+            ");
+            $fallback_stmt->bind_param("i", $lot_id);
+            $fallback_stmt->execute();
+            $fallback_stmt->bind_result($slot_id, $slot_no,
+                                         $displaced_booking_id, $displaced_booking_amount);
+            $found_slot = $fallback_stmt->fetch();
+            $fallback_stmt->close();
+
+            if ($found_slot) {
+                // Cancel the displaced booking (full refund — 3+ hours notice)
+                $disp_cancel = $conn->prepare("
+                    UPDATE books
+                    SET booking_status = 'CANCELLED', refund_status = 'REFUNDED'
+                    WHERE booking_id = ?
+                ");
+                $disp_cancel->bind_param("i", $displaced_booking_id);
+                $disp_cancel->execute();
+                $disp_cancel->close();
+                $entry_type = 'walkin_on_booked';
+            }
+        }
+
+        if (!$found_slot) {
             $conn->rollback();
             respond(['error' => 'No available slots in this lot'], 409);
         }
-        $slot_stmt->close();
     }
 
 
@@ -248,14 +329,22 @@ try {
     $conn->commit();
 
     $response = [
-        'plate'      => $plate,
-        'type'       => $vehicle_type,
-        'slot'       => $slot_no,
-        'lot'        => $lot_id,
-        'entry_type' => $entry_type
+        'plate'        => $plate,
+        'type'         => $vehicle_type,
+        'slot'         => $slot_no,
+        'lot'          => $lot_id,
+        'entry_type'   => $entry_type,
+        'early_walkin' => $early_walkin,
     ];
     if ($booking_id !== null) {
         $response['booking_id'] = $booking_id;
+    }
+    if ($early_walkin) {
+        $response['cancelled_booking_id'] = $cancelled_booking_id;
+        $response['refund_amount']         = $refund_amount;
+    }
+    if ($entry_type === 'walkin_on_booked' && $displaced_booking_id !== null) {
+        $response['displaced_booking_id'] = $displaced_booking_id;
     }
     respond($response, 200);
 

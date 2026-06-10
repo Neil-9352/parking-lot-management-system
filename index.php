@@ -6,17 +6,10 @@ if (isset($_SESSION['admin_logged_in'])) {
     header("Location: admin/dashboard.php");
     exit;
 }
-$error = $_SESSION['login_error'] ?? null;
-unset($_SESSION['login_error']);
 
-// Fetch parking lots
-$lots = [];
-$result = $conn->query("SELECT lot_id, lot_name FROM parking_lot ORDER BY lot_name ASC");
-if ($result) {
-    while ($row = $result->fetch_assoc()) {
-        $lots[] = $row;
-    }
-}
+$error   = $_SESSION['login_error'] ?? null;
+$success = $_SESSION['register_success'] ?? null;
+unset($_SESSION['login_error'], $_SESSION['register_success']);
 ?>
 
 <!DOCTYPE html>
@@ -33,48 +26,31 @@ if ($result) {
 <body>
     <nav class="navbar navbar-dark bg-primary">
         <div class="container-fluid">
-            <spam class="navbar-brand mb-0 h1">Parking Information Management System</spam>
+            <span class="navbar-brand mb-0 h1">Parking Information Management System</span>
         </div>
     </nav>
     <div class="container d-flex align-items-center justify-content-center" style="min-height: 90vh;">
         <div class="card shadow-sm p-4" style="width: 100%; max-width: 400px;">
             <div class="card-body">
                 <h4 class="card-title text-center text-primary mb-4">Admin Login</h4>
-                <!-- <form method="POST" action="admin/process/login_process.php">
-                    <div class="mb-3">
-                        <label for="username" class="form-label">Username</label>
-                        <input type="text" class="form-control" id="username" name="username" value="admin" readonly>
+
+                <?php if ($success): ?>
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <?= htmlspecialchars($success) ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                     </div>
-                    <div class="mb-3">
-                        <label for="password" class="form-label">Password</label>
-                        <input type="password" class="form-control" id="password" name="password" required>
-                    </div>
-                    <div class="d-grid">
-                        <button type="submit" class="btn btn-primary">Login</button>
-                    </div>
-                </form> -->
+                <?php endif; ?>
+
                 <form method="POST" action="admin/process/login_process.php">
 
                     <div class="mb-3">
-                        <label for="lot_id" class="form-label">Select Parking Lot</label>
-                        <select class="form-select" name="lot_id" required>
-                            <option value="">-- Select Lot --</option>
-                            <?php foreach ($lots as $lot): ?>
-                                <option value="<?= $lot['lot_id'] ?>">
-                                    <?= htmlspecialchars($lot['lot_name']) ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
-                    <div class="mb-3">
                         <label for="username" class="form-label">Username</label>
-                        <input type="text" class="form-control" name="username" value="admin" readonly>
+                        <input type="text" class="form-control" name="username" id="username" required>
                     </div>
 
                     <div class="mb-3">
                         <label for="password" class="form-label">Password</label>
-                        <input type="password" class="form-control" name="password" required>
+                        <input type="password" class="form-control" name="password" id="password" required>
                     </div>
 
                     <div class="d-grid">
@@ -83,9 +59,13 @@ if ($result) {
 
                 </form>
 
+                <div class="text-center mt-3">
+                    <small>New parking lot? <a href="register.php">Register here</a></small>
+                </div>
             </div>
         </div>
     </div>
+
     <?php if ($error): ?>
         <div class="toast-container position-fixed bottom-0 end-0 p-3">
             <div class="toast align-items-center text-bg-danger border-0 show" role="alert" aria-live="assertive" aria-atomic="true">
